@@ -1,0 +1,29 @@
+<!doctype html><html><body style="background:#111;margin:0;color:#ccc;font:12px monospace">
+<canvas id="a"></canvas><br><canvas id="b"></canvas><br><canvas id="z"></canvas>
+<script src="js/core.js"></script><script src="js/puppet.js"></script>
+<script>
+const states=['idle','walk','sneak','crouch','jump','fall','climb','inspect','sit','talk'];
+const chars=['detective','vale','officer','tom','ghost'];
+function sheet(id,mode,sc,list){
+  setMode(mode); clearSpriteCache();
+  const cols=list.reduce((m,s)=>Math.max(m,s.n),0);
+  const cv=document.getElementById(id); cv.width=cols*32*sc; cv.height=list.length*40*sc;
+  const c=cv.getContext('2d'); c.imageSmoothingEnabled=mode!=='pixel';
+  c.fillStyle='#2e3a56'; c.fillRect(0,0,cv.width,cv.height);
+  c.setTransform(sc,0,0,sc,0,0);
+  list.forEach((r,i)=>{ for(let f=0;f<r.n;f++){ c.fillStyle=(i+f)%2?'#3b4a68':'#4d5f80'; c.fillRect(f*32,i*40,32,40);
+    drawChar(c,r.ch,f*32+16,i*40+37,1,r.st,f,{light:r.light??1,lightCol:'#e8a95a'}); }});
+}
+const L=[]; for(const st of states) L.push({ch:'detective',st,n:ANIM[st].n});
+for(const ch of chars.slice(1)) L.push({ch,st:ch==='tom'?'sit':'idle',n:ANIM[ch==='tom'?'sit':'idle'].n},{ch,st:'walk',n:8});
+L.push({ch:'detective',st:'idle',n:8,light:0.35});
+sheet('a','pixel',3,L);
+// painted: render native-scale display at same size
+setMode('painted'); clearSpriteCache();
+(function(){const cols=8,sc=3;const cv=document.getElementById('b');cv.width=cols*32*sc;cv.height=L.length*40*sc;const c=cv.getContext('2d');c.fillStyle='#2e3a56';c.fillRect(0,0,cv.width,cv.height);c.setTransform(sc,0,0,sc,0,0);
+L.forEach((r,i)=>{for(let f=0;f<r.n;f++){c.fillStyle=(i+f)%2?'#3b4a68':'#4d5f80';c.fillRect(f*32,i*40,32,40);drawChar(c,r.ch,f*32+16,i*40+37,1,r.st,f,{light:r.light??1,lightCol:'#e8a95a'});}});})();
+// 1x zoom true pixel
+setMode('pixel'); clearSpriteCache();
+(function(){const cv=document.getElementById('z');cv.width=384;cv.height=60;const c=cv.getContext('2d');c.fillStyle='#232d45';c.fillRect(0,0,384,60);
+states.forEach((s,i)=>drawChar(c,'detective',18+i*36,50,1,s,1));cv.style.width='1536px';cv.style.imageRendering='pixelated';})();
+</script></body></html>

@@ -1,0 +1,34 @@
+<!doctype html><html><head><meta charset="utf-8"><title>UI test</title>
+<style>html,body{margin:0;height:100%;background:#000;overflow:hidden}canvas{position:absolute;left:0;top:0;width:100%;height:100%}#bg{image-rendering:pixelated}</style></head>
+<body><canvas id="bg" width="384" height="216"></canvas><canvas id="ui"></canvas>
+<script src="js/core.js"></script><script src="js/ui.js"></script>
+<script>
+// fake world backdrop so overlays are judged in place
+const bg = document.getElementById('bg').getContext('2d');
+const gr = bg.createLinearGradient(0,0,0,216); gr.addColorStop(0,'#121827'); gr.addColorStop(1,'#2e3a56'); bg.fillStyle=gr; bg.fillRect(0,0,384,216);
+bg.fillStyle='#1a2236'; for(let i=0;i<14;i++) bg.fillRect(i*28, 60+((i*37)%50), 26, 160);
+bg.fillStyle='#e8a95a'; for(let i=0;i<60;i++) bg.fillRect((i*53)%384, 80+((i*29)%110), 2, 2);
+function snap(seed, col){ const c=makeCanvas(96,64), x=c.getContext('2d'); const r=mulberry32(seed); x.fillStyle='#0c0f18'; x.fillRect(0,0,96,64);
+  x.fillStyle=col; x.beginPath(); x.arc(20+r()*56, 24, 9, 0, 6.3); x.fill(); x.fillStyle='#3b4a68'; for(let i=0;i<6;i++) x.fillRect(r()*96, 34+r()*10, 8+r()*14, 30); x.fillStyle='#232d45'; x.fillRect(0,54,96,10); return c; }
+const game = {
+  sanity: 64, fade: 0, objective: 'Search the alley behind the Blue Hour for whatever the uniforms missed.',
+  clues: [
+    {id:'petal', title:'Lily petals in the puddle', note:'Fresh. Nobody buys lilies in this neighbourhood.', snap:snap(1,'#f2eee4')},
+    {id:'sigil', title:'Chalk sigil, east wall', note:'Only shows when I look the way he looks.', snap:snap(2,'#39e6ff')},
+    {id:'roof', title:'Candle stub, top landing', note:'Gold thread snagged on the rail.', snap:snap(3,'#e8a95a')},
+    {id:'file', title:'Coroner’s report', note:'Hands folded. Posed like a saint.', snap:null},
+    {id:'phone', title:'Payphone, off the hook', note:'Last call went to my desk.', snap:snap(5,'#ff3d8b')},
+    {id:'shadow', title:'My shadow', note:'It kept moving after I stopped.', snap:snap(6,'#8b9cb8')},
+  ],
+  deductions: [{id:'saints', a:'petal', b:'file', text:'He arranges them like saints. Lilies for purity — he thinks he’s forgiving them.'}],
+  tryLink(a,b){ const s=[a,b].sort().join('+'); const map={'roof+sigil':'The ritual started above the alley. He watched from the fire escape.','phone+shadow':'He’s been watching me. The call came from down there.'};
+    if(map[s] && !this.deductions.find(d=>d.id===s)){ const d={id:s,a,b,text:map[s]}; this.deductions.push(d); return d; } return null; }
+};
+const ui = document.getElementById('ui'), u = ui.getContext('2d');
+function fit(){ const d=devicePixelRatio||1; ui.width=innerWidth*d; ui.height=innerHeight*d; UI.resize(innerWidth, innerHeight, d); } addEventListener('resize',fit); fit();
+ui.addEventListener('click', e=>UI.handleClick(e.clientX, e.clientY));
+addEventListener('keydown', e=>{ if(UI.handleKey(e.code)) return; if(e.code==='KeyN') UI.openNotebook(); if(e.code==='KeyB') UI.openBoard(); if(e.code==='KeyT') UI.say([{who:'Vale', text:'You look tired, detective. Sit. Nobody sees these things the way you do — that is why it hurts.'},{who:'',text:'Third body this month. Same lilies.'}]); if(e.code==='KeyK') UI.toast('Clue added: Lily petals in the puddle'); if(e.code==='KeyX') UI.ending([{text:'CASE 01 — CLOSED?',big:true},'The saint was waiting where the alley ends.',{who:'VALE',text:'You see it now, don’t you? Beautiful.'}],()=>{}); });
+window.show = m => { UI.open=null; if(m==='title') UI.title(()=>{}); if(m==='board') UI.openBoard(); if(m==='notebook') UI.openNotebook(); if(m==='dialog') UI.say([{who:'Vale', text:'You look tired, detective. Sit. Nobody sees these things the way you do — that is why it hurts.'}]); if(m==='end') UI.ending([{text:'CASE 01 — CLOSED?',big:true},'The saint was waiting where the alley ends.',{who:'VALE',text:'You see it now, don’t you? Beautiful.'}],()=>{}); if(m==='play'){ UI.toast('Clue added: Lily petals in the puddle'); UI._promptDemo=true; } };
+UI.title(()=>{});
+(function loop(){ if(UI._promptDemo) UI.prompt(innerWidth*0.45, innerHeight*0.6, 'E  Inspect'); UI.draw(u, innerWidth, innerHeight, game); requestAnimationFrame(loop); })();
+</script></body></html>
