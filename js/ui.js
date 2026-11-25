@@ -427,10 +427,10 @@ const UI = {
     u.font = `${Math.round(70 * k)}px ${HAND}`; u.fillStyle = '#e4dccb';
     const tt = 'S A I N T S   O F   A S H'; u.shadowColor = 'rgba(255,61,139,0.45)'; u.shadowBlur = 24 * k; u.fillText(tt, w / 2, h * 0.36); u.shadowBlur = 0;
     u.fillStyle = '#b3141f'; u.fillRect(w / 2 - 170 * k, h * 0.36 + 18 * k, 340 * k * clamp((t - 0.8) / 1.2, 0, 1), 2 * k);
-    u.font = `italic ${Math.round(20 * k)}px ${HAND}`; u.fillStyle = 'rgba(228,220,203,0.8)'; u.fillText('Case 01 — The Lily Saint', w / 2, h * 0.36 + 52 * k);
+    u.font = `italic ${Math.round(20 * k)}px ${HAND}`; u.fillStyle = 'rgba(228,220,203,0.8)'; u.fillText(this.subtitle || 'Case 01 — The Lily Saint', w / 2, h * 0.36 + 52 * k);
     u.globalAlpha = clamp((t - 1.5) / 1.5, 0, 1);
     u.font = `${Math.round(12 * k + 2)}px ${TYPE}`; u.fillStyle = 'rgba(183,195,214,0.75)';
-    const ctl = ['A / D  move      SPACE  jump      W / S  climb, stairs      SHIFT  sneak', 'E  inspect, talk, use      Q (hold)  see through his eyes      N  notebook', 'V  pixel / painted look      M  sound'];
+    const ctl = this.controls || ['A / D  move      SPACE  jump      W / S  climb, stairs      SHIFT  sneak', 'E  inspect, talk, use      Q (hold)  see through his eyes      N  notebook', 'V  pixel / painted look      M  sound'];
     ctl.forEach((l, i) => u.fillText(l, w / 2, h * 0.62 + i * 22 * k));
     if (t > 2.5 && Math.floor(t * 1.6) % 2 === 0) { u.font = `bold ${Math.round(15 * k + 2)}px ${TYPE}`; u.fillStyle = '#e8a95a'; u.fillText('PRESS ENTER', w / 2, h * 0.84); }
     u.font = `italic ${Math.round(12 * k + 2)}px ${HAND}`; u.fillStyle = 'rgba(228,220,203,0.35)'; u.fillText('headphones recommended', w / 2, h * 0.92);
