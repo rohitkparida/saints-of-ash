@@ -13,6 +13,8 @@
 #tc .b{position:absolute;display:flex;align-items:center;justify-content:center;border-radius:50%;pointer-events:auto;
  background:rgba(10,14,24,.45);border:2px solid rgba(183,195,214,.3);letter-spacing:.05em}
 #tc .b.on{background:rgba(57,230,255,.3);border-color:rgba(57,230,255,.7)}
+#tc .top{position:absolute;top:10px;right:calc(14px + env(safe-area-inset-right));display:flex;gap:10px}
+#tc .top .b{position:relative;width:48px;height:48px;font-size:11px}
 #tc .hint{position:absolute;left:14px;bottom:10px;opacity:.35;font-size:10px}
 #tc .rot{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:#030407;pointer-events:auto;font-size:15px;text-align:center;padding:20px}
 @media (orientation:portrait){#tc .rot{display:flex}}`;
@@ -24,7 +26,7 @@
  <div class="b" data-k="KeyQ" data-hold style="right:92px;bottom:0;width:56px;height:56px">EYE</div>
  <div class="b" data-k="ShiftLeft" data-toggle style="right:12px;bottom:92px;width:56px;height:56px">SNEAK</div>
  <div class="b" data-k="KeyN" style="right:92px;bottom:72px;width:48px;height:48px">NOTE</div>
-</div><div class="rot">Turn your phone sideways to play</div>`;
+</div><div class="top"><div class="b" data-k="KeyO" id="tcCam" style="display:none">CAM</div><div class="b" id="tcFull">FULL</div></div><div class="rot">Turn your phone sideways to play</div>`;
   document.body.appendChild(root);
 
   // first touch: go fullscreen and lock landscape where the browser allows it
@@ -51,11 +53,18 @@
   pad.addEventListener('touchend', padEnd); pad.addEventListener('touchcancel', padEnd);
 
   // buttons: tap = key press; data-hold = held while touched; data-toggle = latch on/off
-  for (const b of root.querySelectorAll('.b')) { const k0 = b.dataset.k; let k = k0; const hold = 'hold' in b.dataset, tog = 'toggle' in b.dataset; let on = false;
+  // FULL toggles fullscreen; CAM (orbit camera) only exists on the three.js page
+  const isFull = () => document.fullscreenElement || document.webkitFullscreenElement;
+  const full = root.querySelector('#tcFull');
+  full.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); fs = true;
+    if (isFull()) (document.exitFullscreen || document.webkitExitFullscreen).call(document); else { fs = false; goFull(); } }, { passive: false });
+  const sync = () => full.classList.toggle('on', !!isFull()); document.addEventListener('fullscreenchange', sync); document.addEventListener('webkitfullscreenchange', sync);
+  addEventListener('load', () => { if (window.ISO3D) root.querySelector('#tcCam').style.display = ''; });
+  for (const b of root.querySelectorAll('.b[data-k]')) { const k0 = b.dataset.k; let k = k0; const hold = 'hold' in b.dataset, tog = 'toggle' in b.dataset; let on = false;
     b.addEventListener('touchstart', e => { e.preventDefault(); goFull();
       k = k0 === 'KeyE' && typeof UI !== 'undefined' && (UI.open === 'title' || UI.open === 'end') ? 'Enter' : k0; // title/end screens take Enter
       if (tog) { on = !on; b.classList.toggle('on', on); send(on ? 'keydown' : 'keyup', k); return; }
-      b.classList.add('on'); send('keydown', k); if (!hold) setTimeout(() => send('keyup', k), 60); }, { passive: false });
-    const up = e => { e.preventDefault(); if (tog) return; b.classList.remove('on'); if (hold) send('keyup', k); };
+      b.classList.add('on'); send('keydown', k); if (k0 === 'KeyO') { setTimeout(() => b.classList.toggle('on', !!(window.ORB && ORB.on)), 0); } if (!hold) setTimeout(() => send('keyup', k), 60); }, { passive: false });
+    const up = e => { e.preventDefault(); if (tog) return; if (k0 !== 'KeyO') b.classList.remove('on'); if (hold) send('keyup', k); };
     b.addEventListener('touchend', up); b.addEventListener('touchcancel', up); }
 })();

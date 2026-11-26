@@ -14,30 +14,61 @@ const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 camera.matrixAutoUpdate = false; camera.matrixWorld.identity(); camera.matrixWorldInverse.identity();
 
 // exact projection: screen x = (x-y)*16 - cx, screen y = (x+y)*8 - z - cy; depth grows toward the viewer along (1,1,16)
-function setCamera(cx, cy) {
+const _rot = new THREE.Matrix4(), _t = new THREE.Matrix4();
+function setCamera(cx, cy, yaw = 0, px = 0, py = 0) {
   const w = NW, h = NH, m = camera.projectionMatrix;
   m.set(32 / w, -32 / w, 0, -2 * cx / w - 1,
     -16 / h, -16 / h, 2 / h, 1 + 2 * cy / h,
     -1 / 40, -1 / 40, -1 / 640, 1 - 8 / 40,
     0, 0, 0, 1);
+  if (yaw) { // orbit: spin the world about the vertical axis through (px, py)
+    _rot.makeTranslation(px, py, 0).multiply(_t.makeRotationZ(yaw)).multiply(_t.makeTranslation(-px, -py, 0)); m.multiply(_rot); }
   camera.projectionMatrixInverse.copy(m).invert();
 }
 
 // ---------- projected-art material ----------
-const VS = `uniform vec4 rect; varying vec2 vUv;
-void main(){ vec4 wp = modelMatrix * vec4(position, 1.0); float sx = (wp.x - wp.y) * 16.0; float sy = (wp.x + wp.y) * 8.0 - wp.z;
-  vUv = (vec2(sx, sy) - rect.xy) / rect.zw; gl_Position = projectionMatrix * viewMatrix * wp; }`;
-const FS = `uniform sampler2D map; uniform sampler2D mapO; uniform float other, warp, opacity, sil; uniform vec3 tint; varying vec2 vUv;
+// Lighting: the 2D demo darkens everything with a navy layer (alpha 0.8) and cuts soft holes around each light.
+// Here every surface is lit per pixel by the same lights: distance to the light's vertical "pole" (ground pool + lit walls),
+// a facing term so surfaces turned away stay darker, the same darkness colour, and dithered bands in pixel mode.
+// World space for lighting: x, y in tiles, z in "tile" units (16 native px per tile of height).
+const MAXL = 24;
+const LU = { lp: { value: Array.from({ length: MAXL }, () => new THREE.Vector4()) }, lc: { value: Array.from({ length: MAXL }, () => new THREE.Vector4()) },
+  ln: { value: 0 }, dark: { value: new THREE.Vector4(3 / 255, 5 / 255, 12 / 255, 0.8) }, vdir: { value: new THREE.Vector3(1, 1, 1).normalize() },
+  lit3d: { value: 1 }, pix: { value: 1 }, emis: { value: null }, floorEm: { value: null }, erect: { value: new THREE.Vector4(0, 0, 1, 1) } };
+const VS = `uniform vec4 rect; uniform vec4 erect; uniform float local; varying vec2 vUv; varying vec2 vE; varying vec3 vQ;
+void main(){ vec4 wp = modelMatrix * vec4(position, 1.0); vec3 q = local > 0.5 ? position : wp.xyz; float sx = (q.x - q.y) * 16.0; float sy = (q.x + q.y) * 8.0 - q.z;
+  vUv = (vec2(sx, sy) - rect.xy) / rect.zw;
+  vE = (vec2((wp.x - wp.y) * 16.0, (wp.x + wp.y) * 8.0 - wp.z) - erect.xy) / erect.zw;
+  vQ = vec3(wp.xy, wp.z / 16.0); gl_Position = projectionMatrix * viewMatrix * wp; }`;
+const FS = `uniform sampler2D map; uniform sampler2D mapO; uniform float other, warp, opacity, sil; uniform vec3 tint; varying vec2 vUv; varying vec2 vE; varying vec3 vQ;
+uniform vec4 lp[${MAXL}]; uniform vec4 lc[${MAXL}]; uniform int ln; uniform vec4 dark; uniform vec3 vdir; uniform float lit3d, pix, lit, noLam, emisOn;
+uniform sampler2D emis; uniform sampler2D floorEm;
+float bayer(vec2 p){ int x = int(mod(p.x, 4.0)), y = int(mod(p.y, 4.0)); int i = x + y * 4;
+  float m[16] = float[16](0.,8.,2.,10.,12.,4.,14.,6.,3.,11.,1.,9.,15.,7.,13.,5.); return (m[i] + 0.5) / 16.0; }
 void main(){ if (vUv.x < 0.0 || vUv.y < 0.0 || vUv.x > 1.0 || vUv.y > 1.0) discard;
   vec4 a = texture2D(map, vUv), b = texture2D(mapO, vUv); vec4 c = other > 0.5 ? b : a;
   if (other < 0.5 && warp > 0.01) { c.rgb = mix(c.rgb, b.rgb, b.a * warp); c.a = max(c.a, b.a * warp); }
-  if (c.a < 0.02) discard; if (sil > 0.5) c.rgb = tint; gl_FragColor = vec4(c.rgb, c.a * opacity); }`;
+  if (c.a < 0.02) discard; if (sil > 0.5) c.rgb = tint;
+  if (lit > 0.5 && lit3d > 0.5) {
+    vec3 n = normalize(cross(dFdx(vQ), dFdy(vQ))); if (dot(n, vdir) < 0.0) n = -n;
+    vec3 E = vec3(0.0);
+    for (int i = 0; i < ${MAXL}; i++) { if (i >= ln) break;
+      vec3 L = lp[i].xyz; vec3 s = vec3(L.xy, clamp(vQ.z, 0.0, L.z)); float d = length(vQ - s) / lp[i].w;
+      float f = d < 1.0 ? 0.82 * sqrt(1.0 - d) : 0.0; if (f <= 0.0) continue;
+      vec3 Ld = L - vQ; float ll = length(Ld); float lam = noLam > 0.5 || ll < 0.05 ? 1.0 : 0.3 + 0.7 * max(dot(n, Ld / ll), 0.0);
+      E += lc[i].rgb * f * lam; }
+    if (pix > 0.5) E = floor(E * 4.0 + bayer(gl_FragCoord.xy)) / 4.0;
+    E = clamp(E, 0.0, 1.0); vec3 al = dark.a * (1.0 - E); c.rgb = c.rgb * (1.0 - al) + dark.rgb * al;
+  }
+  if (emisOn > 0.5 && lit3d > 0.5 && vE.x > 0.0 && vE.y > 0.0 && vE.x < 1.0 && vE.y < 1.0) { vec4 e = emisOn > 1.5 ? texture2D(floorEm, vE) : texture2D(emis, vE); c.rgb += e.rgb * e.a; }
+  gl_FragColor = vec4(c.rgb, c.a * opacity); }`;
 function tex(cv) { const t = new THREE.CanvasTexture(cv); t.flipY = false; t.magFilter = t.minFilter = THREE.NearestFilter; t.generateMipmaps = false; t.colorSpace = THREE.NoColorSpace; return t; }
 function artMat(bake, opt = {}) {
   const map = tex(bake.cv), mapO = bake.cvO ? tex(bake.cvO) : map;
   return new THREE.ShaderMaterial({ vertexShader: VS, fragmentShader: FS, transparent: true, depthWrite: true, side: THREE.DoubleSide,
     uniforms: { map: { value: map }, mapO: { value: mapO }, rect: { value: new THREE.Vector4(bake.bx, bake.by, bake.bw, bake.bh) },
-      other: { value: 0 }, warp: { value: 0 }, opacity: { value: 1 }, sil: { value: opt.sil ? 1 : 0 }, tint: { value: new THREE.Color(opt.tint || '#ffffff') } }, ...opt.mat });
+      local: { value: 0 }, other: { value: 0 }, warp: { value: 0 }, opacity: { value: 1 }, sil: { value: opt.sil ? 1 : 0 }, tint: { value: new THREE.Color(opt.tint || '#ffffff') },
+      lit: { value: opt.lit === 0 ? 0 : 1 }, noLam: { value: opt.noLam ? 1 : 0 }, emisOn: { value: opt.emis || 0 }, ...LU }, ...opt.mat });
 }
 
 // ---------- geometry ----------
@@ -45,7 +76,9 @@ class Geo { constructor() { this.p = []; }
   quad(a, b, c, d) { this.p.push(...a, ...b, ...c, ...a, ...c, ...d); return this; }
   // the faces the 2D box() draws: top, +y side, +x side
   box(x0, y0, x1, y1, z0, z1) { this.quad([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]);
-    this.quad([x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]); this.quad([x1, y1, z0], [x1, y0, z0], [x1, y0, z1], [x1, y1, z1]); return this; }
+    this.quad([x0, y1, z0], [x1, y1, z0], [x1, y1, z1], [x0, y1, z1]); this.quad([x1, y1, z0], [x1, y0, z0], [x1, y0, z1], [x1, y1, z1]);
+    // back faces: hidden in the fixed view (same projected texel as the front), needed once the camera orbits
+    this.quad([x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]); this.quad([x0, y0, z0], [x0, y1, z0], [x0, y1, z1], [x0, y0, z1]); return this; }
   build() { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3)); return g; } }
 // record the boxes a 2D draw function makes, so each prop gets its own real shape
 const box2d = window.box; let capture = null;
@@ -58,7 +91,7 @@ function backPlanes(g, it) { const [x0, y0, x1, y1] = it.fp, b = it.full, zt = M
   g.quad([x0, y0 + e, 0], [x1, y0 + e, 0], [x1, y0 + e, zt], [x0, y0 + e, zt]); g.quad([x0 + e, y0, 0], [x0 + e, y1, 0], [x0 + e, y1, zt], [x0 + e, y0, zt]); }
 function meshOf(boxes, bake, order, opt, up = 2, it = null) { const g = new Geo(); if (it) backPlanes(g, it); for (const [x0, y0, x1, y1, z0, z1] of boxes) g.box(Math.min(x0, x1) - E, Math.min(y0, y1) - E, Math.max(x0, x1) + E, Math.max(y0, y1) + E, z0, Math.max(z0, z1) + up); const m = new THREE.Mesh(g.build(), artMat(bake, opt)); m.frustumCulled = false; m.renderOrder = order; scene.add(m); return m; }
 
-let built = null, floorMesh, decal, decalCv, items3 = [];
+let built = null, floorMesh, decal, decalCv, items3 = [], emCv, flCv, emS = 1;
 function build(sc) {
   for (const o of [...scene.children]) { scene.remove(o); o.geometry && o.geometry.dispose(); }
   items3 = [];
@@ -69,22 +102,28 @@ function build(sc) {
   fg.quad([pl.x0, pl.y0, -d], [pl.x1, pl.y0, -d], [pl.x1, pl.y0, 0], [pl.x0, pl.y0, 0]);   // north basin wall, faces +y
   fg.quad([pl.x0, pl.y0, -d], [pl.x0, pl.y1, -d], [pl.x0, pl.y1, 0], [pl.x0, pl.y0, 0]);   // west basin wall, faces +x
   const floorGeo = fg.build();
-  floorMesh = new THREE.Mesh(floorGeo, artMat(sc.floor)); floorMesh.frustumCulled = false; floorMesh.renderOrder = -10; scene.add(floorMesh);
+  floorMesh = new THREE.Mesh(floorGeo, artMat(sc.floor, { emis: 2 })); floorMesh.frustumCulled = false; floorMesh.renderOrder = -10; scene.add(floorMesh);
   // dynamic floor decals (rain rings, character shadows), drawn each frame on a canvas the size of the floor bake
   decalCv = makeCanvas(sc.floor.cv.width, sc.floor.cv.height);
   decal = new THREE.Mesh(floorGeo, artMat({ cv: decalCv, bx: sc.floor.bx, by: sc.floor.by, bw: sc.floor.bw, bh: sc.floor.bh }, { mat: { depthWrite: false } }));
   decal.frustumCulled = false; decal.renderOrder = -9; scene.add(decal);
+  // glowing things (neon, signs, screens) and floor reflections: level-sized canvases projected onto the geometry
+  const ES = G.mode === 'pixel' ? 1 : 2; emCv = makeCanvas(sc.floor.bw * ES, sc.floor.bh * ES); flCv = makeCanvas(sc.floor.bw * ES, sc.floor.bh * ES); emS = ES;
+  LU.emis.value = tex(emCv); LU.floorEm.value = tex(flCv); if (ES > 1) for (const t of [LU.emis.value, LU.floorEm.value]) t.magFilter = t.minFilter = THREE.LinearFilter;
+  LU.erect.value.set(sc.floor.bx, sc.floor.by, sc.floor.bw, sc.floor.bh);
   for (const it of sc.items) {
     const ord = it.key * 10; let boxes, stubBoxes = null;
     if (it.kind === 'wall') { boxes = boxesOf(c => drawWall(c, it.w, WH)); if (it.stub) stubBoxes = boxesOf(c => drawWall(c, it.w, 6)); }
     else if (it.kind === 'roof') { const [x, y] = it.fp; boxes = boxesOf(c => drawRoof(c, x, y, it.room)); }
+    else if (it.o && it.o.t === 'bags') { const o = it.o, r = mulberry32(4); boxes = []; // the four sacks the 2D art draws, same random layout
+      for (let i = 0; i < 4; i++) { const x = o.x0 + r() * 0.6, y = o.y0 + r() * 0.7, k = (3 + r() * 2) / 22; boxes.push([x - k, y - k, x + k, y + k, 0, 7]); } }
     else if (it.o) boxes = boxesOf(c => PROPDRAW[it.o.t](c, it.o));
     else { // fence segment: corner post plus the chain-link plane
       const [x0, y0, x1, y1] = it.fp, east = (x1 - x0) < 0.2; boxes = [[x0, y0, x0 + 0.06, y0 + 0.06, 0, 30]];
       boxes.push(east ? [x1, y0, x1, y1, 0, 30] : [x0, y1, x1, y1, 0, 30]); }
     if (!boxes.length) { const [x0, y0, x1, y1] = it.fp; boxes = [[x0, y0, x1, y1, 0, (PROPZ[it.t] || 20) - 2]]; }
     const up = it.kind === 'wall' || it.kind === 'roof' ? 0 : 2; // walls/roofs must not poke through each other
-    const m = meshOf(boxes, it.full, ord, undefined, up, it.o ? it : null), s = stubBoxes ? meshOf(stubBoxes, it.stub, ord - 0.5, undefined, 0) : null;
+    const m = meshOf(boxes, it.full, ord, { emis: 1 }, up, it.o ? it : null), s = stubBoxes ? meshOf(stubBoxes, it.stub, ord - 0.5, { emis: 1 }, 0) : null;
     items3.push({ it, m, s });
   }
   built = sc;
@@ -96,22 +135,29 @@ function charMesh(id, sil) {
   const k = id + (sil ? ':sil' : '') + G.S; if (chars.has(k)) return chars.get(k);
   const cv = makeCanvas(CW * G.S, CH * G.S), bake = { cv, bx: 0, by: 0, bw: CW, bh: CH };
   const g = new Geo().quad([-0.75, 0.75, -6], [0.75, -0.75, -6], [0.75, -0.75, 50], [-0.75, 0.75, 50]).build();
-  const m = new THREE.Mesh(g, artMat(bake, sil ? { sil: true, tint: '#39e6ff', mat: { depthFunc: THREE.GreaterDepth, depthWrite: false } } : {}));
-  m.frustumCulled = false; const rec = { cv, m, map: m.material.uniforms.map.value, used: false }; chars.set(k, rec); scene.add(m); return rec;
+  const m = new THREE.Mesh(g, artMat(bake, sil ? { sil: true, lit: 0, tint: '#39e6ff', mat: { depthFunc: THREE.GreaterDepth, depthWrite: false } } : { noLam: true }));
+  m.frustumCulled = false; m.material.uniforms.local.value = 1; const rec = { cv, m, map: m.material.uniforms.map.value, used: false }; chars.set(k, rec); scene.add(m); return rec;
 }
 const LIFT = 0.14; // slide characters toward the camera along the view ray (same pixels) so they sit in front of what they stand beside
 function placeChar(rec, x, y, order, opacity = 1) {
-  const p = P(x, y); rec.m.position.set(x + LIFT, y + LIFT, LIFT * 16); rec.m.renderOrder = order; rec.m.visible = true; rec.used = true;
-  const u = rec.m.material.uniforms; u.rect.value.set(p[0] - CW / 2, p[1] - 50, CW, CH); u.opacity.value = opacity; rec.map.needsUpdate = true;
+  const p = P(x, y); rec.m.position.set(x + LIFT, y + LIFT, LIFT * 16); rec.m.renderOrder = order; rec.m.visible = true; rec.used = true; rec.m.rotation.z = -ORB.yaw; // keep facing the camera
+  const u = rec.m.material.uniforms; u.rect.value.set(-CW / 2, -50, CW, CH); u.opacity.value = opacity; rec.map.needsUpdate = true;
 }
 
+// orbit camera (KeyO / touch CAM): spins around the player; off eases back to the exact isometric view
+const ORB = { on: false, yaw: 0, t: 0 }; window.LIT3D = true; addEventListener('keydown', e => { if (e.code === 'KeyL') window.LIT3D = !window.LIT3D; });
+window.ORB = ORB;
+addEventListener('keydown', e => { if (e.code === 'KeyO') ORB.on = !ORB.on; });
 function render3d() {
   const S = G.S, sc = buildScene(), t = G.t, other = game.world === 'other', pix = G.mode === 'pixel';
   if (sc !== built) build(sc);
   let cx = camX, cy = camY; if (pix) { cx = Math.round(cx); cy = Math.round(cy); } else { cx = Math.round(cx * S) / S; cy = Math.round(cy * S) / S; }
   const W = (c) => c.setTransform(S, 0, 0, S, -cx * S, -cy * S);
   if (glCanvas.width !== NW * S) renderer.setSize(NW * S, NH * S, false);
-  setCamera(cx, cy);
+  const dt = Math.min(0.1, Math.max(0, G.t - ORB.t)); ORB.t = G.t;
+  if (ORB.on) ORB.yaw += dt * 0.6; else if (ORB.yaw) { const tw = Math.PI * 2, tgt = Math.round(ORB.yaw / tw) * tw, d = tgt - ORB.yaw; ORB.yaw = Math.abs(d) < 0.01 ? 0 : ORB.yaw + d * Math.min(1, dt * 4); if (!ORB.yaw || Math.abs(ORB.yaw - tgt) < 0.01) ORB.yaw = 0; }
+  const flat = ORB.yaw === 0;
+  setCamera(cx, cy, ORB.yaw, PL.x, PL.y);
   const warp = game.warp;
   const setU = (m, op) => { const u = m.material.uniforms; u.other.value = other ? 1 : 0; u.warp.value = warp; u.opacity.value = op; m.visible = op > 0.02; m.material.depthWrite = op > 0.5; };
   setU(floorMesh, 1);
@@ -141,13 +187,21 @@ function render3d() {
       const s = charMesh('player', true), sctx = s.cv.getContext('2d'); sctx.setTransform(1, 0, 0, 1, 0, 0); sctx.clearRect(0, 0, s.cv.width, s.cv.height); sctx.setTransform(S, 0, 0, S, 0, 0);
       drawChar(sctx, 'detective', CW / 2, 50, PL.face, PL.state, PL.frame, { silhouette: '#39e6ff' }); placeChar(s, v.x, v.y, 1e5, 0.35); }
   }
+  // lights -> shader uniforms (same lights, radii and strengths as the 2D darkness holes)
+  const LIT = window.LIT3D !== false; LU.lit3d.value = LIT ? 1 : 0; LU.pix.value = pix ? 1 : 0;
+  if (other) LU.dark.value.set(22 / 255, 8 / 255, 5 / 255, 0.6); else LU.dark.value.set(3 / 255, 5 / 255, 12 / 255, 0.8);
+  { const c = Math.cos(-ORB.yaw), s2 = Math.sin(-ORB.yaw); LU.vdir.value.set(c - s2, s2 + c, 1).normalize(); }
+  const n = Math.min(MAXL, LIGHTS.length); LU.ln.value = n; const tc = new THREE.Color();
+  for (let i = 0; i < n; i++) { const l = LIGHTS[i]; LU.lp.value[i].set(l.x, l.y, l.h / 16, l.r / 22.6); tc.set(l.c); tc.lerp(new THREE.Color(1, 1, 1), 0.5); LU.lc.value[i].set(tc.r * l.s, tc.g * l.s, tc.b * l.s, 1); }
   renderer.setClearColor(other ? '#0b0605' : '#030407', 1);
   renderer.render(scene, camera);
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.imageSmoothingEnabled = !pix; ctx.drawImage(glCanvas, 0, 0);
   W(ctx);
   // ---------- everything below is the 2D demo's own overlay pass, unchanged ----------
+  if (flat) { // world-space 2D lighting and effects only line up with the fixed isometric view
   drawSteam(ctx, steam, other ? C.a1 : null);
   for (const s of smoke) rect(ctx, s.x, s.y, 1, 1, rgba(C.b9, Math.sin(Math.PI * s.life / s.max) * 0.35));
+  if (!LIT) {
   const dc = darkCv.getContext('2d'); dc.setTransform(1, 0, 0, 1, 0, 0); dc.globalCompositeOperation = 'source-over'; dc.clearRect(0, 0, darkCv.width, darkCv.height);
   dc.fillStyle = other ? 'rgba(22,8,5,0.6)' : 'rgba(3,5,12,0.8)'; dc.fillRect(0, 0, darkCv.width, darkCv.height);
   dc.globalCompositeOperation = 'destination-out'; W(dc);
@@ -155,6 +209,7 @@ function render3d() {
     else { dc.save(); dc.translate(x, y); dc.scale(1, ry / rx); const g = dc.createRadialGradient(0, 0, 0, 0, 0, rx); g.addColorStop(0, `rgba(0,0,0,${a})`); g.addColorStop(0.5, `rgba(0,0,0,${a * 0.55})`); g.addColorStop(1, 'rgba(0,0,0,0)'); dc.fillStyle = g; dc.fillRect(-rx, -rx, rx * 2, rx * 2); dc.restore(); } };
   for (const l of LIGHTS) { const g = P(l.x, l.y); hole(g[0], g[1], l.r, l.r * 0.5, l.s); hole(g[0], g[1] - l.h * 0.55, l.r * 0.45, l.r * 0.45, l.s * 0.55); }
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(darkCv, 0, 0); W(ctx);
+  } // !LIT: 2D darkness layer; with LIT the shader lights every surface instead
   ctx.save(); ctx.globalCompositeOperation = 'lighter';
   for (const l of LIGHTS) { const g = P(l.x, l.y, l.h); const big = l.kind === 'siren' ? 10 : l.kind === 'neon' ? 22 : l.kind === 'lamp' ? 10 : 7;
     glow(ctx, g[0], g[1], big, l.c, l.s * 0.9); if (l.kind !== 'window' && l.kind !== 'tvwin') { const gg = P(l.x, l.y); ctx.fillStyle = rgba(l.c, l.s * 0.07); if (pix) pxEllipse(ctx, gg[0], gg[1], l.r * 0.6, l.r * 0.3); else { ctx.beginPath(); ctx.ellipse(gg[0], gg[1], l.r * 0.6, l.r * 0.3, 0, 0, 6.28); ctx.fill(); } }
@@ -171,6 +226,7 @@ function render3d() {
   ctx.restore();
   if (game.eye > 0.05 && !other) { ctx.save(); ctx.globalAlpha = game.eye * 0.8; onPlane(ctx, 0, c => { c.fillStyle = C.rd; const G2 = L.ghost; for (let i = 1; i < G2.length; i++) { const a = G2[i - 1], b = G2[i], len = Math.hypot(b[0] - a[0], b[1] - a[1]), n = len / 0.42 | 0; for (let k = 0; k < n; k++) { const u = k / n, nx = -(b[1] - a[1]) / len, ny = (b[0] - a[0]) / len, s = k % 2 ? 0.07 : -0.07; c.fillRect(lerp(a[0], b[0], u) + nx * s, lerp(a[1], b[1], u) + ny * s, 0.1, 0.07); } } }); ctx.restore(); drawSigil(ctx, t, game.eye); }
   if (other) drawTableau(ctx, t);
+  } // flat
   ctx.setTransform(S, 0, 0, S, 0, 0);
   if (!other) drawWeather(ctx, cx, cy); else drawAsh(ctx, ash, cx * 0.3, t);
   ctx.setTransform(1, 0, 0, 1, 0, 0);
