@@ -54,8 +54,8 @@ void main(){ if (vUv.x < 0.0 || vUv.y < 0.0 || vUv.x > 1.0 || vUv.y > 1.0) disca
     vec3 E = vec3(0.0);
     for (int i = 0; i < ${MAXL}; i++) { if (i >= ln) break;
       vec3 L = lp[i].xyz; vec3 s = vec3(L.xy, clamp(vQ.z, 0.0, L.z)); float d = length(vQ - s) / lp[i].w;
-      float f = d < 1.0 ? 0.82 * sqrt(1.0 - d) : 0.0; if (f <= 0.0) continue;
-      vec3 Ld = L - vQ; float ll = length(Ld); float lam = noLam > 0.5 || ll < 0.05 ? 1.0 : 0.3 + 0.7 * max(dot(n, Ld / ll), 0.0);
+      float f = d < 1.0 ? sqrt(1.0 - d) : 0.0; if (f <= 0.0) continue;
+      vec3 Ld = L - vQ; float ll = length(Ld); float lam = noLam > 0.5 || ll < 0.05 ? 1.0 : 0.45 + 0.55 * max(dot(n, Ld / ll), 0.0);
       E += lc[i].rgb * f * lam; }
     if (pix > 0.5) E = floor(E * 4.0 + bayer(gl_FragCoord.xy)) / 4.0;
     E = clamp(E, 0.0, 1.0); vec3 al = dark.a * (1.0 - E); c.rgb = c.rgb * (1.0 - al) + dark.rgb * al;
@@ -148,6 +148,29 @@ function placeChar(rec, x, y, order, opacity = 1) {
 const ORB = { on: false, yaw: 0, t: 0 }; window.LIT3D = true; addEventListener('keydown', e => { if (e.code === 'KeyL') window.LIT3D = !window.LIT3D; });
 window.ORB = ORB;
 addEventListener('keydown', e => { if (e.code === 'KeyO') ORB.on = !ORB.on; });
+function fx2d(c, halos, walls, floor = c) { // the 2D demo's additive light effects; c/floor = where wall and floor parts go
+  const t = G.t, other = game.world === 'other', pix = G.mode === 'pixel';
+  c.save(); c.globalCompositeOperation = 'lighter'; if (floor !== c) { floor.save(); floor.globalCompositeOperation = 'lighter'; }
+  if (halos) {
+  
+  for (const l of LIGHTS) { const g = P(l.x, l.y, l.h); const big = l.kind === 'siren' ? 10 : l.kind === 'neon' ? 22 : l.kind === 'lamp' ? 10 : 7;
+    glow(c, g[0], g[1], big, l.c, l.s * 0.9); if (l.kind !== 'window' && l.kind !== 'tvwin') { const gg = P(l.x, l.y); c.fillStyle = rgba(l.c, l.s * 0.07); if (pix) pxEllipse(c, gg[0], gg[1], l.r * 0.6, l.r * 0.3); else { c.beginPath(); c.ellipse(gg[0], gg[1], l.r * 0.6, l.r * 0.3, 0, 0, 6.28); c.fill(); } }
+    if (l.kind === 'siren') { const a = P(l.x + 0.25, l.y - 0.02 + (l.phase ? 0.1 : -0.1), 19); rect(c, a[0] - 2, a[1], 4, 2, l.c); } }
+  } else for (const l of LIGHTS) { const gg = P(l.x, l.y);
+    if (l.kind !== 'window' && l.kind !== 'tvwin') { floor.fillStyle = rgba(l.c, l.s * 0.07); if (pix) pxEllipse(floor, gg[0], gg[1], l.r * 0.6, l.r * 0.3); else { floor.beginPath(); floor.ellipse(gg[0], gg[1], l.r * 0.6, l.r * 0.3, 0, 0, 6.28); floor.fill(); } }
+    if (l.kind === 'siren') { const a = P(l.x + 0.25, l.y - 0.02 + (l.phase ? 0.1 : -0.1), 19); rect(c, a[0] - 2, a[1], 4, 2, l.c); } }
+  if (!other) for (const [x, y, rx, ry] of L.puddles) for (const l of LIGHTS) { const d = Math.hypot(x - l.x, y - l.y); if (d > 7 || l.room) continue; const k = (1 - d / 7) * l.s; const p = P(x, y);
+    const tall = l.kind === 'neon' || l.kind === 'lamp' || l.kind === 'siren'; floor.fillStyle = rgba(l.c, k * 0.5);
+    const w = rx * 12, hgt = tall ? ry * 10 + 4 : ry * 6; const ox = (isoX(l.x, l.y) - p[0]) * 0.12, oyy = Math.sin(t * 3 + x) * 0.5;
+    if (pix) floor.fillRect(Math.round(p[0] + ox - w * 0.25), Math.round(p[1] - ry * 4 + oyy), Math.round(w * 0.5), Math.round(hgt * 0.6)); else { floor.beginPath(); floor.ellipse(p[0] + ox, p[1] + oyy, w * 0.35, hgt * 0.35, 0, 0, 6.28); floor.fill(); } }
+  if (walls) {
+  if (!other) { const sp = L.props.find(o => o.t === 'sign'); signLetters(c, sp.x, sp.y, true, t);
+    for (const nt of L.neonText) { const w = WALLMAP[nt.edge]; const F = faceY(w.x, w.x + 1, w.y + 0.05); const on = flick(nt.seed, t, 0.5); const F2 = (u, z) => F(u * 0.5, z); faceText(c, F2, nt.text, nt.u, 0.03, nt.z, 0.9, on ? COL(nt.col) : rgba(COL(nt.col), 0.2)); if (halos) glow(c, ...P(w.x + 0.9, w.y + 0.05, nt.z - 2), 16, COL(nt.col), on ? 0.5 : 0.05); }
+    const ice = L.props.find(o => o.t === 'ice'); faceText(c, faceY(ice.x0, ice.x1, ice.y1), 'ICE', 0.3, 0.035, 19.5, 0.7, flick(4, t, 0.4) ? C.cy : rgba(C.cy, 0.2));
+    const tv = 1 - roomFade.r6; if (tv > 0.05) { const dr = L.props.find(o => o.t === 'dresser'); const F = faceX(dr.y0 + 0.2, dr.y1 - 0.2, dr.x1 - 0.08); for (let z = 14; z < 21; z++) fq(c, F, 0.12, 0.88, z, z + 1, rgba(C.cy, tv * (0.15 + 0.35 * hash2(z, Math.floor(t * 14), 3)))); }
+    const bo = L.props.find(o => o.t === 'booth'); fq(c, faceX(bo.y0, bo.y1, bo.x1), 0.08, 0.92, 31, 33, rgba(C.b9, flick(7, t, 1.3) ? 0.7 : 0.1)); }
+  }
+  c.restore(); if (floor !== c) floor.restore(); }
 function render3d() {
   const S = G.S, sc = buildScene(), t = G.t, other = game.world === 'other', pix = G.mode === 'pixel';
   if (sc !== built) build(sc);
@@ -193,9 +216,17 @@ function render3d() {
   { const c = Math.cos(-ORB.yaw), s2 = Math.sin(-ORB.yaw); LU.vdir.value.set(c - s2, s2 + c, 1).normalize(); }
   const n = Math.min(MAXL, LIGHTS.length); LU.ln.value = n; const tc = new THREE.Color();
   for (let i = 0; i < n; i++) { const l = LIGHTS[i]; LU.lp.value[i].set(l.x, l.y, l.h / 16, l.r / 22.6); tc.set(l.c); tc.lerp(new THREE.Color(1, 1, 1), 0.5); LU.lc.value[i].set(tc.r * l.s, tc.g * l.s, tc.b * l.s, 1); }
+  if (LIT) { const e = emCv.getContext('2d'), f = flCv.getContext('2d'), bx = built.floor.bx, by = built.floor.by;
+    for (const k of [e, f]) { k.setTransform(1, 0, 0, 1, 0, 0); k.clearRect(0, 0, emCv.width, emCv.height); k.imageSmoothingEnabled = !pix; k.setTransform(emS, 0, 0, emS, -bx * emS, -by * emS); }
+    fx2d(e, false, true, f); LU.emis.value.needsUpdate = true; LU.floorEm.value.needsUpdate = true; }
   renderer.setClearColor(other ? '#0b0605' : '#030407', 1);
   renderer.render(scene, camera);
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.imageSmoothingEnabled = !pix; ctx.drawImage(glCanvas, 0, 0);
+  if (LIT) { ctx.save(); ctx.setTransform(S, 0, 0, S, 0, 0); ctx.globalCompositeOperation = 'lighter'; const v = new THREE.Vector3(); // bulb halos where each light now sits on screen
+    for (const l of LIGHTS) { v.set(l.x, l.y, l.h).project(camera); const big = l.kind === 'siren' ? 10 : l.kind === 'neon' ? 22 : l.kind === 'lamp' ? 10 : 7;
+      glow(ctx, (v.x + 1) / 2 * NW, (1 - v.y) / 2 * NH, big, l.c, l.s * 0.9); }
+    for (const nt of (other ? [] : L.neonText)) { const w = WALLMAP[nt.edge]; v.set(w.x + 0.9, w.y + 0.05, nt.z - 2).project(camera); glow(ctx, (v.x + 1) / 2 * NW, (1 - v.y) / 2 * NH, 16, COL(nt.col), flick(nt.seed, t, 0.5) ? 0.5 : 0.05); }
+    ctx.restore(); }
   W(ctx);
   // ---------- everything below is the 2D demo's own overlay pass, unchanged ----------
   if (flat) { // world-space 2D lighting and effects only line up with the fixed isometric view
@@ -210,20 +241,7 @@ function render3d() {
   for (const l of LIGHTS) { const g = P(l.x, l.y); hole(g[0], g[1], l.r, l.r * 0.5, l.s); hole(g[0], g[1] - l.h * 0.55, l.r * 0.45, l.r * 0.45, l.s * 0.55); }
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(darkCv, 0, 0); W(ctx);
   } // !LIT: 2D darkness layer; with LIT the shader lights every surface instead
-  ctx.save(); ctx.globalCompositeOperation = 'lighter';
-  for (const l of LIGHTS) { const g = P(l.x, l.y, l.h); const big = l.kind === 'siren' ? 10 : l.kind === 'neon' ? 22 : l.kind === 'lamp' ? 10 : 7;
-    glow(ctx, g[0], g[1], big, l.c, l.s * 0.9); if (l.kind !== 'window' && l.kind !== 'tvwin') { const gg = P(l.x, l.y); ctx.fillStyle = rgba(l.c, l.s * 0.07); if (pix) pxEllipse(ctx, gg[0], gg[1], l.r * 0.6, l.r * 0.3); else { ctx.beginPath(); ctx.ellipse(gg[0], gg[1], l.r * 0.6, l.r * 0.3, 0, 0, 6.28); ctx.fill(); } }
-    if (l.kind === 'siren') { const a = P(l.x + 0.25, l.y - 0.02 + (l.phase ? 0.1 : -0.1), 19); rect(ctx, a[0] - 2, a[1], 4, 2, l.c); } }
-  if (!other) for (const [x, y, rx, ry] of L.puddles) for (const l of LIGHTS) { const d = Math.hypot(x - l.x, y - l.y); if (d > 7 || l.room) continue; const k = (1 - d / 7) * l.s; const p = P(x, y);
-    const tall = l.kind === 'neon' || l.kind === 'lamp' || l.kind === 'siren'; ctx.fillStyle = rgba(l.c, k * 0.5);
-    const w = rx * 12, hgt = tall ? ry * 10 + 4 : ry * 6; const ox = (isoX(l.x, l.y) - p[0]) * 0.12, oyy = Math.sin(t * 3 + x) * 0.5;
-    if (pix) ctx.fillRect(Math.round(p[0] + ox - w * 0.25), Math.round(p[1] - ry * 4 + oyy), Math.round(w * 0.5), Math.round(hgt * 0.6)); else { ctx.beginPath(); ctx.ellipse(p[0] + ox, p[1] + oyy, w * 0.35, hgt * 0.35, 0, 0, 6.28); ctx.fill(); } }
-  if (!other) { const sp = L.props.find(o => o.t === 'sign'); signLetters(ctx, sp.x, sp.y, true, t);
-    for (const nt of L.neonText) { const w = WALLMAP[nt.edge]; const F = faceY(w.x, w.x + 1, w.y + 0.05); const on = flick(nt.seed, t, 0.5); const F2 = (u, z) => F(u * 0.5, z); faceText(ctx, F2, nt.text, nt.u, 0.03, nt.z, 0.9, on ? COL(nt.col) : rgba(COL(nt.col), 0.2)); glow(ctx, ...P(w.x + 0.9, w.y + 0.05, nt.z - 2), 16, COL(nt.col), on ? 0.5 : 0.05); }
-    const ice = L.props.find(o => o.t === 'ice'); faceText(ctx, faceY(ice.x0, ice.x1, ice.y1), 'ICE', 0.3, 0.035, 19.5, 0.7, flick(4, t, 0.4) ? C.cy : rgba(C.cy, 0.2));
-    const tv = 1 - roomFade.r6; if (tv > 0.05) { const dr = L.props.find(o => o.t === 'dresser'); const F = faceX(dr.y0 + 0.2, dr.y1 - 0.2, dr.x1 - 0.08); for (let z = 14; z < 21; z++) fq(ctx, F, 0.12, 0.88, z, z + 1, rgba(C.cy, tv * (0.15 + 0.35 * hash2(z, Math.floor(t * 14), 3)))); }
-    const bo = L.props.find(o => o.t === 'booth'); fq(ctx, faceX(bo.y0, bo.y1, bo.x1), 0.08, 0.92, 31, 33, rgba(C.b9, flick(7, t, 1.3) ? 0.7 : 0.1)); }
-  ctx.restore();
+  if (!LIT) fx2d(ctx, true, true);
   if (game.eye > 0.05 && !other) { ctx.save(); ctx.globalAlpha = game.eye * 0.8; onPlane(ctx, 0, c => { c.fillStyle = C.rd; const G2 = L.ghost; for (let i = 1; i < G2.length; i++) { const a = G2[i - 1], b = G2[i], len = Math.hypot(b[0] - a[0], b[1] - a[1]), n = len / 0.42 | 0; for (let k = 0; k < n; k++) { const u = k / n, nx = -(b[1] - a[1]) / len, ny = (b[0] - a[0]) / len, s = k % 2 ? 0.07 : -0.07; c.fillRect(lerp(a[0], b[0], u) + nx * s, lerp(a[1], b[1], u) + ny * s, 0.1, 0.07); } } }); ctx.restore(); drawSigil(ctx, t, game.eye); }
   if (other) drawTableau(ctx, t);
   } // flat
