@@ -59,12 +59,12 @@
   full.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); fs = true;
     if (isFull()) (document.exitFullscreen || document.webkitExitFullscreen).call(document); else { fs = false; goFull(); } }, { passive: false });
   const sync = () => full.classList.toggle('on', !!isFull()); document.addEventListener('fullscreenchange', sync); document.addEventListener('webkitfullscreenchange', sync);
-  addEventListener('load', () => { if (window.ISO3D) root.querySelector('#tcCam').style.display = ''; });
+  addEventListener('load', () => { if (window.ISO3D) { const c = root.querySelector('#tcCam'); c.style.display = ''; c.textContent = ['CAM', 'LEAN', 'DRIFT', 'PARALX', 'CRANE', 'ORBIT'][ORB.mode]; c.classList.toggle('on', !!ORB.mode); } });
   for (const b of root.querySelectorAll('.b[data-k]')) { const k0 = b.dataset.k; let k = k0; const hold = 'hold' in b.dataset, tog = 'toggle' in b.dataset; let on = false;
     b.addEventListener('touchstart', e => { e.preventDefault(); goFull();
       k = k0 === 'KeyE' && typeof UI !== 'undefined' && (UI.open === 'title' || UI.open === 'end') ? 'Enter' : k0; // title/end screens take Enter
       if (tog) { on = !on; b.classList.toggle('on', on); send(on ? 'keydown' : 'keyup', k); return; }
-      b.classList.add('on'); send('keydown', k); if (k0 === 'KeyO') { setTimeout(() => b.classList.toggle('on', !!(window.ORB && ORB.on)), 0); } if (!hold) setTimeout(() => send('keyup', k), 60); }, { passive: false });
+      b.classList.add('on'); send('keydown', k); if (k0 === 'KeyO') { setTimeout(() => { b.classList.toggle('on', !!(window.ORB && ORB.mode)); b.textContent = window.ORB ? ['CAM', 'LEAN', 'DRIFT', 'PARALX', 'CRANE', 'ORBIT'][ORB.mode] : 'CAM'; }, 0); } if (!hold) setTimeout(() => send('keyup', k), 60); }, { passive: false });
     const up = e => { e.preventDefault(); if (tog) return; if (k0 !== 'KeyO') b.classList.remove('on'); if (hold) send('keyup', k); };
     b.addEventListener('touchend', up); b.addEventListener('touchcancel', up); }
 })();

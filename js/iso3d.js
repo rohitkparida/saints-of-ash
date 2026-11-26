@@ -15,12 +15,16 @@ camera.matrixAutoUpdate = false; camera.matrixWorld.identity(); camera.matrixWor
 
 // exact projection: screen x = (x-y)*16 - cx, screen y = (x+y)*8 - z - cy; depth grows toward the viewer along (1,1,16)
 const _rot = new THREE.Matrix4(), _t = new THREE.Matrix4();
-function setCamera(cx, cy, yaw = 0, px = 0, py = 0) {
+function setCamera(cx, cy, yaw = 0, px = 0, py = 0, pitch = 0, persp = 0) {
   const w = NW, h = NH, m = camera.projectionMatrix;
   m.set(32 / w, -32 / w, 0, -2 * cx / w - 1,
     -16 / h, -16 / h, 2 / h, 1 + 2 * cy / h,
     -1 / 40, -1 / 40, -1 / 640, 1 - 8 / 40,
     0, 0, 0, 1);
+  if (persp) { // nearer the viewer (larger x+y, higher z) = larger on screen, centred on the player
+    m.elements[3] = persp / 24; m.elements[7] = persp / 24; m.elements[11] = persp / 384; m.elements[15] = 1 - persp * (px + py) / 24; }
+  if (pitch) { // tilt about the screen's horizontal axis through the player: + looks more from above, - more from the side
+    _rot.makeTranslation(px, py, 0).multiply(_t.makeScale(1, 1, 16)).multiply(_t.makeRotationAxis(new THREE.Vector3(1, -1, 0).normalize(), pitch)).multiply(_t.makeScale(1, 1, 1 / 16)).multiply(_t.makeTranslation(-px, -py, 0)); m.multiply(_rot); } // heights are px, 16 px = 1 tile
   if (yaw) { // orbit: spin the world about the vertical axis through (px, py)
     _rot.makeTranslation(px, py, 0).multiply(_t.makeRotationZ(yaw)).multiply(_t.makeTranslation(-px, -py, 0)); m.multiply(_rot); }
   camera.projectionMatrixInverse.copy(m).invert();
@@ -147,7 +151,9 @@ function placeChar(rec, x, y, order, opacity = 1) {
 // orbit camera (KeyO / touch CAM): spins around the player; off eases back to the exact isometric view
 const ORB = { on: false, yaw: 0, t: 0 }; window.LIT3D = true; addEventListener('keydown', e => { if (e.code === 'KeyL') window.LIT3D = !window.LIT3D; });
 window.ORB = ORB;
-addEventListener('keydown', e => { if (e.code === 'KeyO') ORB.on = !ORB.on; });
+// KeyO / CAM cycles: fixed -> lean -> drift -> orbit -> fixed. Lean and drift are small yaw swings driven by walking.
+const CAMMODES = ['fixed', 'lean', 'drift', 'parallax', 'crane', 'orbit']; ORB.pitch = 0; ORB.persp = 0; ORB.vy = 0; ORB.mode = 2; ORB.vx = 0; ORB.px = null; ORB.sw = 0;
+addEventListener('keydown', e => { if (e.code === 'KeyO') { ORB.mode = (ORB.mode + 1) % 6; ORB.on = ORB.mode === 5; if (typeof UI !== 'undefined' && UI.toast) UI.toast('Camera: ' + CAMMODES[ORB.mode]); } });
 function fx2d(c, halos, walls, floor = c) { // the 2D demo's additive light effects; c/floor = where wall and floor parts go
   const t = G.t, other = game.world === 'other', pix = G.mode === 'pixel';
   c.save(); c.globalCompositeOperation = 'lighter'; if (floor !== c) { floor.save(); floor.globalCompositeOperation = 'lighter'; }
@@ -178,9 +184,23 @@ function render3d() {
   const W = (c) => c.setTransform(S, 0, 0, S, -cx * S, -cy * S);
   if (glCanvas.width !== NW * S) renderer.setSize(NW * S, NH * S, false);
   const dt = Math.min(0.1, Math.max(0, G.t - ORB.t)); ORB.t = G.t;
-  if (ORB.on) ORB.yaw += dt * 0.6; else if (ORB.yaw) { const tw = Math.PI * 2, tgt = Math.round(ORB.yaw / tw) * tw, d = tgt - ORB.yaw; ORB.yaw = Math.abs(d) < 0.01 ? 0 : ORB.yaw + d * Math.min(1, dt * 4); if (!ORB.yaw || Math.abs(ORB.yaw - tgt) < 0.01) ORB.yaw = 0; }
-  const flat = ORB.yaw === 0;
-  setCamera(cx, cy, ORB.yaw, PL.x, PL.y);
+  // walking speed across the screen (native px/s), smoothed
+  if (ORB.px && dt > 0) { const v = ((PL.x - ORB.px[0]) - (PL.y - ORB.px[1])) * 16 / dt; ORB.vx += (Math.max(-80, Math.min(80, v)) - ORB.vx) * Math.min(1, dt * 6);
+    const vy = ((PL.x - ORB.px[0]) + (PL.y - ORB.px[1])) * 8 / dt; ORB.vy += (Math.max(-60, Math.min(60, vy)) - ORB.vy) * Math.min(1, dt * 6); } ORB.px = [PL.x, PL.y];
+  if (ORB.mode === 1 || ORB.mode === 2) { const lean = ORB.mode === 1; // lean: tips against the walk, settles when you stop. drift: trails behind slowly and stays turned a while
+    const tgt = (lean ? -0.25 : 0.35) * ORB.vx / 60; const k = lean ? 3 : 0.8; ORB.sw += (tgt - ORB.sw) * Math.min(1, dt * k);
+    ORB.yaw = Math.abs(ORB.sw) < 0.0005 && Math.abs(ORB.vx) < 0.5 ? 0 : ORB.sw; }
+  // parallax: walking pushes in a touch of perspective plus a small lean, so near and far things slide apart.
+  // crane: walking up the screen lowers the camera toward the facades, walking down raises it toward top-down.
+  { const spd = Math.min(1, Math.hypot(ORB.vx, ORB.vy) / 40), par = ORB.mode === 3, cr = ORB.mode === 4;
+    const tp = par ? 0.45 * spd : cr ? 0.15 * spd : 0, tt = cr ? 0.3 * ORB.vy / 40 : par ? 0.06 * spd : ORB.mode === 2 ? 0.18 * ORB.vy / 40 : 0;
+    ORB.persp += (tp - ORB.persp) * Math.min(1, dt * 2); ORB.pitch += (tt - ORB.pitch) * Math.min(1, dt * 1.8);
+    if (Math.abs(ORB.persp) < 0.002 && !tp) ORB.persp = 0; if (Math.abs(ORB.pitch) < 0.001 && !tt) ORB.pitch = 0;
+    if (par) { ORB.sw += (-0.15 * ORB.vx / 60 - ORB.sw) * Math.min(1, dt * 2); ORB.yaw = Math.abs(ORB.sw) < 0.0005 && Math.abs(ORB.vx) < 0.5 ? 0 : ORB.sw; } }
+  if (ORB.mode >= 1 && ORB.mode <= 3) {}
+  else if (ORB.on) ORB.yaw += dt * 0.6; else if (ORB.yaw) { const tw = Math.PI * 2, tgt = Math.round(ORB.yaw / tw) * tw, d = tgt - ORB.yaw; ORB.yaw = Math.abs(d) < 0.01 ? 0 : ORB.yaw + d * Math.min(1, dt * 4); if (!ORB.yaw || Math.abs(ORB.yaw - tgt) < 0.01) ORB.yaw = 0; }
+  const flat = ORB.yaw === 0 && !ORB.pitch && !ORB.persp;
+  setCamera(cx, cy, ORB.yaw, PL.x, PL.y, ORB.pitch, ORB.persp);
   const warp = game.warp;
   const setU = (m, op) => { const u = m.material.uniforms; u.other.value = other ? 1 : 0; u.warp.value = warp; u.opacity.value = op; m.visible = op > 0.02; m.material.depthWrite = op > 0.5; };
   setU(floorMesh, 1);
