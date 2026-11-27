@@ -5,8 +5,8 @@ let ctx = view.getContext('2d'); const uctx = ui.getContext('2d');
 let cssW = 0, cssH = 0;
 function layout() {
   const S = G.S; view.width = NW * S; view.height = NH * S;
-  const k = G.mode === 'pixel' ? Math.max(1, Math.floor(Math.min(innerWidth / NW, innerHeight / NH))) : Math.min(innerWidth / NW, innerHeight / NH);
-  cssW = Math.floor(NW * k); cssH = Math.floor(NH * k);
+  const k = Math.max(innerWidth / NW, innerHeight / NH); // cover: fill the window edge to edge, crop overflow
+  cssW = Math.ceil(NW * k); cssH = Math.ceil(NH * k);
   for (const el of [view, ui]) { el.style.width = cssW + 'px'; el.style.height = cssH + 'px'; el.style.left = ((innerWidth - cssW) / 2 | 0) + 'px'; el.style.top = ((innerHeight - cssH) / 2 | 0) + 'px'; }
   view.style.imageRendering = G.mode === 'pixel' ? 'pixelated' : 'auto';
   const dpr = window.devicePixelRatio || 1; ui.width = cssW * dpr; ui.height = cssH * dpr; if (UI.resize) UI.resize(cssW, cssH, dpr);
