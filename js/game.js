@@ -194,7 +194,6 @@ function update() {
   G.t += 1 / 60;
   if (game.started && !UI.open && !transitioning && In.hit('KeyE')) { const it = nearestInteract(); if (it) interact(it); }
   if (In.hit('KeyN') && game.started && !UI.open) { Sound.sfx('page'); UI.openNotebook(); }
-  if (In.hit('KeyV')) toggleMode();
   if (In.hit('KeyM')) Sound.muted = !Sound.muted;
   updatePlayer();
   // killer's eye & sanity
@@ -322,7 +321,7 @@ function frame(now) {
 }
 anyKeyHook = k => { if (UI.open && UI.handleKey) { UI.handleKey(k); delete pressed[k]; } };
 function boot() {
-  const q = new URLSearchParams(location.search); if (q.get('mode') === 'painted') setMode('painted');
+  const q = new URLSearchParams(location.search); if (q.get('mode') === 'pixel') setMode('pixel');
   layout(); enterArea(q.get('area') || 'alley', +(q.get('x') || 60)); game.fade = 0;
   const start = () => { game.started = true; game.fade = 1; const t0 = performance.now(); const f = () => { const k = (performance.now() - t0) / 1500; game.fade = Math.max(0, 1 - k); if (k < 1) requestAnimationFrame(f); }; f();
     setTimeout(() => UI.say([

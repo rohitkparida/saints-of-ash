@@ -21,7 +21,7 @@ function drawBleed(view) {
   bleedT.getContext('2d').drawImage(view, 0, 0, view.width, r, 0, 0, 64, 1);
   bleedB.getContext('2d').drawImage(view, 0, view.height - r, view.width, r, 0, 0, 64, 1);
 }
-const G = { mode: 'pixel', S: 1, t: 0 };  // S = render scale (1 pixel mode, 4 painted mode)
+const G = { mode: 'painted', S: 4, t: 0 };  // painted is the art style; S = render scale (pixel mode kept only for ?mode=pixel comparisons)
 function setMode(m) { G.mode = m; G.S = m === 'pixel' ? 1 : 4; }
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const lerp = (a, b, t) => a + (b - a) * t;

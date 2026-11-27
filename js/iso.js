@@ -452,7 +452,6 @@ function update() {
   G.t += 1 / 60;
   if (game.started && !UI.open && !transitioning && In.hit('KeyE')) { const it = nearestInteract(); if (it) interact(it); }
   if (In.hit('KeyN') && game.started && !UI.open) { Sound.sfx('page'); UI.openNotebook(); }
-  if (In.hit('KeyV')) toggleMode();
   if (In.hit('KeyM')) Sound.muted = !Sound.muted;
   updatePlayer();
   const pr = roomAtW(PL.x, PL.y); for (const k in roomFade) roomFade[k] = lerp(roomFade[k], k === pr ? 0 : 1, 0.12);
@@ -629,9 +628,9 @@ function frame(now) {
 }
 anyKeyHook = k => { if (UI.open && UI.handleKey) { UI.handleKey(k); delete pressed[k]; } };
 function boot() {
-  const q = new URLSearchParams(location.search); if (q.get('mode') === 'painted') setMode('painted');
+  const q = new URLSearchParams(location.search); if (q.get('mode') === 'pixel') setMode('pixel');
   UI.subtitle = 'Case 01 — The Lily Saint  ·  Starlite Motor Court';
-  UI.controls = ['W A S D / arrows  walk      SHIFT  sneak      E  inspect, talk, use', 'Q (hold)  see through his eyes      N  notebook', 'V  pixel / painted look      M  sound'];
+  UI.controls = ['W A S D / arrows  walk      SHIFT  sneak      E  inspect, talk, use', 'Q (hold)  see through his eyes      N  notebook', 'M  sound'];
   layout(); buildScene(); const p = P(PL.x, PL.y); camX = p[0] - NW / 2; camY = p[1] - NH / 2; game.fade = 0;
   if (q.get('x')) { PL.x = +q.get('x'); PL.y = +q.get('y'); }
   const start = () => { game.started = true; game.fade = 1; const t0 = performance.now(); const f = () => { const k = (performance.now() - t0) / 1500; game.fade = Math.max(0, 1 - k); if (k < 1) requestAnimationFrame(f); }; f();
