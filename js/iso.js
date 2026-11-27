@@ -18,7 +18,7 @@ function layout() {
   const f = fitNW(), S = G.S; view.width = NW * S; view.height = NH * S;
   cssW = f.w; cssH = f.h; const top = (innerHeight - cssH) / 2 | 0; // whole-number scale: every native pixel is k x k screen pixels
   for (const el of [view, ui]) { el.style.width = cssW + 'px'; el.style.height = cssH + 'px'; el.style.left = ((innerWidth - cssW) / 2 | 0) + 'px'; el.style.top = top + 'px'; }
-  view.style.imageRendering = G.mode === 'pixel' ? 'pixelated' : 'auto'; placeBleed(view, top, cssH);
+  view.style.imageRendering = 'pixelated'; placeBleed(view, top, cssH);
   const dpr = window.devicePixelRatio || 1; ui.width = cssW * dpr; ui.height = cssH * dpr; if (UI.resize) UI.resize(cssW, cssH, dpr);
   ctx = view.getContext('2d'); darkCv = makeCanvas(NW * S, NH * S); occCv = makeCanvas(NW * S, NH * S); silCv = makeCanvas(NW * S, NH * S);
 }
@@ -63,7 +63,7 @@ function faceText(c, F, str, u0, du, zTop, dz, col, vertical) {
 
 // ================= baking (static sprites, both worlds) =================
 function remapOther(cv, ox, oy, S) { // like otherRemap() but in world-continuous coordinates
-  const c = cv.getContext('2d'), im = c.getImageData(0, 0, cv.width, cv.height), d = im.data, W = cv.width, n = RUST.length - 1, pix = G.mode === 'pixel';
+  const c = cv.getContext('2d'), im = c.getImageData(0, 0, cv.width, cv.height), d = im.data, W = cv.width, n = RUST.length - 1;
   for (let i = 0, p = 0; i < d.length; i += 4, p++) {
     if (d[i + 3] < 10) continue;
     const px = p % W, py = (p / W) | 0, x = ox + px / S, y = oy + py / S;
@@ -71,8 +71,7 @@ function remapOther(cv, ox, oy, S) { // like otherRemap() but in world-continuou
     if (mx - mn > 110 && lum > 0.3) lum *= 0.55;
     const rot = fbm(x / 38, y / 30, 3), streak = vnoise(x / 3, y / 60, 8);
     lum = lum * 1.25 + 0.03; if (rot > 0.6) lum *= 0.45; else if (rot > 0.57) lum = lum * 0.8 + 0.18; lum -= Math.max(0, streak - 0.62) * 0.9; lum = clamp(lum, 0, 1);
-    if (pix) { const q = RUST[clamp(Math.round(lum * n * 1.15 + (bayer(px, py) - 0.5) * 0.9), 0, n)]; d[i] = q[0]; d[i + 1] = q[1]; d[i + 2] = q[2]; }
-    else { const f = clamp(lum * n * 1.15, 0, n), i0 = Math.floor(f), i1 = Math.min(n, i0 + 1), t = f - i0, a = RUST[i0], b = RUST[i1]; d[i] = lerp(a[0], b[0], t); d[i + 1] = lerp(a[1], b[1], t); d[i + 2] = lerp(a[2], b[2], t); }
+    { const q = RUST[clamp(Math.round(lum * n * 1.15 + (bayer(px, py) - 0.5) * 0.9), 0, n)]; d[i] = q[0]; d[i + 1] = q[1]; d[i + 2] = q[2]; }
   }
   c.putImageData(im, 0, 0);
 }
@@ -240,7 +239,7 @@ const SOLIDS = L.props.filter(o => o.solid).map(o => { const f = propFootprint(o
 const ROOFED = []; for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) if (roomOf(x, y)) ROOFED.push([x, y]);
 
 function buildScene() {
-  const key = G.mode; if (SCENE.byMode[key]) return SCENE.byMode[key];
+  const key = 'px'; if (SCENE.byMode[key]) return SCENE.byMode[key];
   const items = [];
   // floor
   const floor = bakeBox(FX, FY, FW, FH, drawFloor, 16);
@@ -444,7 +443,7 @@ function crossOver() {
 }
 function snapshot(wx, wy) {
   const S = G.S, w = 72, h = 56, sx = clamp(Math.round(isoX(wx, wy) - camX - w / 2), 0, NW - w), sy = clamp(Math.round(isoY(wx, wy) - camY - h + 12), 0, NH - h);
-  const cv = makeCanvas(w * 4, h * 4), c = cv.getContext('2d'); c.imageSmoothingEnabled = G.mode !== 'pixel'; c.drawImage(view, sx * S, sy * S, w * S, h * S, 0, 0, w * 4, h * 4); return cv;
+  const cv = makeCanvas(w * 4, h * 4), c = cv.getContext('2d'); c.imageSmoothingEnabled = false; c.drawImage(view, sx * S, sy * S, w * S, h * S, 0, 0, w * 4, h * 4); return cv;
 }
 
 // ================= update =================
@@ -481,7 +480,6 @@ function update() {
   let buzz = 0; for (const l of LIGHTS) if (l.kind === 'neon' || l.kind === 'tube' || l.kind === 'ice') buzz = Math.max(buzz, clamp(1 - Math.hypot(PL.x - l.x, PL.y - l.y) / 3, 0, 1)); Sound.set('buzz', buzz);
   Sound.update(); clearPressed();
 }
-function toggleMode() { setMode(G.mode === 'pixel' ? 'painted' : 'pixel'); clearSpriteCache(); layout(); buildScene(); if (UI.toast) UI.toast(G.mode === 'pixel' ? 'Visual style: pixel art (384x216)' : 'Visual style: hand-painted'); }
 
 // ================= depth sorting =================
 function sortItems(list) {
@@ -499,17 +497,17 @@ function sortItems(list) {
 
 // ================= render =================
 function render() {
-  const S = G.S, sc = buildScene(), t = G.t, other = game.world === 'other', pix = G.mode === 'pixel';
-  let cx = camX, cy = camY; if (pix) { cx = Math.round(cx); cy = Math.round(cy); } else { cx = Math.round(cx * S) / S; cy = Math.round(cy * S) / S; }
+  const S = G.S, sc = buildScene(), t = G.t, other = game.world === 'other';
+  let cx = camX, cy = camY; { cx = Math.round(cx); cy = Math.round(cy); }
   const W = (c) => c.setTransform(S, 0, 0, S, -cx * S, -cy * S);
-  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.imageSmoothingEnabled = !pix; ctx.fillStyle = other ? '#0b0605' : '#030407'; ctx.fillRect(0, 0, view.width, view.height);
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.imageSmoothingEnabled = false; ctx.fillStyle = other ? '#0b0605' : '#030407'; ctx.fillRect(0, 0, view.width, view.height);
   W(ctx);
   const warp = game.warp, img = (b, alpha = 1) => { const cv = other ? b.cvO : b.cv; ctx.globalAlpha = alpha; ctx.drawImage(cv, b.bx, b.by, b.bw, b.bh);
     if (!other && warp > 0.01) { ctx.globalAlpha = alpha * warp; ctx.drawImage(b.cvO, b.bx, b.by, b.bw, b.bh); } ctx.globalAlpha = 1; };
   img(sc.floor);
   // floor-level dynamics: rain rings in puddles, shadows
-  if (!other) for (const [x, y, rx, ry] of L.puddles) { const k = (t * 0.9 + hash1(x * 7)) % 1; const p = P(x + Math.sin(k * 20) * rx * 0.4, y); ctx.fillStyle = rgba(C.b7, 0.5 * (1 - k)); if (pix) { ctx.fillRect(Math.round(p[0] - 1 - k * 4), Math.round(p[1]), 1, 1); ctx.fillRect(Math.round(p[0] + 1 + k * 4), Math.round(p[1]), 1, 1); } else { ctx.beginPath(); ctx.ellipse(p[0], p[1], 1 + k * 4, 0.5 + k * 2, 0, 0, 6.28); ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 0.4; ctx.stroke(); } }
-  const shadow = (x, y) => { const p = P(x, y); ctx.fillStyle = 'rgba(3,4,7,0.45)'; if (pix) pxEllipse(ctx, p[0], p[1], 6, 2); else { ctx.beginPath(); ctx.ellipse(p[0], p[1], 6, 2.4, 0, 0, 6.28); ctx.fill(); } };
+  if (!other) for (const [x, y, rx, ry] of L.puddles) { const k = (t * 0.9 + hash1(x * 7)) % 1; const p = P(x + Math.sin(k * 20) * rx * 0.4, y); ctx.fillStyle = rgba(C.b7, 0.5 * (1 - k)); { ctx.fillRect(Math.round(p[0] - 1 - k * 4), Math.round(p[1]), 1, 1); ctx.fillRect(Math.round(p[0] + 1 + k * 4), Math.round(p[1]), 1, 1); } }
+  const shadow = (x, y) => { const p = P(x, y); ctx.fillStyle = 'rgba(3,4,7,0.45)'; pxEllipse(ctx, p[0], p[1], 6, 2); };
   // drawables
   const vis = [], vx0 = cx - 40, vy0 = cy - 40, vx1 = cx + NW + 40, vy1 = cy + NH + 40;
   for (const it of sc.items) { const b = it.full; if (b.bx > vx1 || b.bx + b.bw < vx0 || b.by > vy1 || b.by + b.bh < vy0) continue; it.sx0 = b.bx; it.sy0 = b.by; it.sx1 = b.bx + b.bw; it.sy1 = b.by + b.bh; vis.push(it); }
@@ -539,20 +537,19 @@ function render() {
   const dc = darkCv.getContext('2d'); dc.setTransform(1, 0, 0, 1, 0, 0); dc.globalCompositeOperation = 'source-over'; dc.clearRect(0, 0, darkCv.width, darkCv.height);
   dc.fillStyle = other ? 'rgba(22,8,5,0.6)' : 'rgba(3,5,12,0.8)'; dc.fillRect(0, 0, darkCv.width, darkCv.height);
   dc.globalCompositeOperation = 'destination-out'; W(dc);
-  const hole = (x, y, rx, ry, a) => { if (pix) { [[1, 0.3], [0.66, 0.32], [0.36, 0.38]].forEach(([k, al]) => { dc.fillStyle = `rgba(0,0,0,${a * al})`; pxEllipse(dc, x, y, rx * k, ry * k); }); }
-    else { dc.save(); dc.translate(x, y); dc.scale(1, ry / rx); const g = dc.createRadialGradient(0, 0, 0, 0, 0, rx); g.addColorStop(0, `rgba(0,0,0,${a})`); g.addColorStop(0.5, `rgba(0,0,0,${a * 0.55})`); g.addColorStop(1, 'rgba(0,0,0,0)'); dc.fillStyle = g; dc.fillRect(-rx, -rx, rx * 2, rx * 2); dc.restore(); } };
+  const hole = (x, y, rx, ry, a) => { { [[1, 0.3], [0.66, 0.32], [0.36, 0.38]].forEach(([k, al]) => { dc.fillStyle = `rgba(0,0,0,${a * al})`; pxEllipse(dc, x, y, rx * k, ry * k); }); } };
   for (const l of LIGHTS) { const g = P(l.x, l.y); hole(g[0], g[1], l.r, l.r * 0.5, l.s); hole(g[0], g[1] - l.h * 0.55, l.r * 0.45, l.r * 0.45, l.s * 0.55); }
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(darkCv, 0, 0); W(ctx);
   // ---------- emissive (additive) ----------
   ctx.save(); ctx.globalCompositeOperation = 'lighter';
   for (const l of LIGHTS) { const g = P(l.x, l.y, l.h); const big = l.kind === 'siren' ? 10 : l.kind === 'neon' ? 22 : l.kind === 'lamp' ? 10 : 7;
-    glow(ctx, g[0], g[1], big, l.c, l.s * 0.9); if (l.kind !== 'window' && l.kind !== 'tvwin') { const gg = P(l.x, l.y); ctx.fillStyle = rgba(l.c, l.s * 0.07); if (pix) pxEllipse(ctx, gg[0], gg[1], l.r * 0.6, l.r * 0.3); else { ctx.beginPath(); ctx.ellipse(gg[0], gg[1], l.r * 0.6, l.r * 0.3, 0, 0, 6.28); ctx.fill(); } }
+    glow(ctx, g[0], g[1], big, l.c, l.s * 0.9); if (l.kind !== 'window' && l.kind !== 'tvwin') { const gg = P(l.x, l.y); ctx.fillStyle = rgba(l.c, l.s * 0.07); pxEllipse(ctx, gg[0], gg[1], l.r * 0.6, l.r * 0.3); }
     if (l.kind === 'siren') { const a = P(l.x + 0.25, l.y - 0.02 + (l.phase ? 0.1 : -0.1), 19); rect(ctx, a[0] - 2, a[1], 4, 2, l.c); } }
   // puddle reflections
   if (!other) for (const [x, y, rx, ry] of L.puddles) for (const l of LIGHTS) { const d = Math.hypot(x - l.x, y - l.y); if (d > 7 || l.room) continue; const k = (1 - d / 7) * l.s; const p = P(x, y);
     const tall = l.kind === 'neon' || l.kind === 'lamp' || l.kind === 'siren'; ctx.fillStyle = rgba(l.c, k * 0.5);
     const w = rx * 12, hgt = tall ? ry * 10 + 4 : ry * 6; const ox = (isoX(l.x, l.y) - p[0]) * 0.12, oyy = Math.sin(t * 3 + x) * 0.5;
-    if (pix) ctx.fillRect(Math.round(p[0] + ox - w * 0.25), Math.round(p[1] - ry * 4 + oyy), Math.round(w * 0.5), Math.round(hgt * 0.6)); else { ctx.beginPath(); ctx.ellipse(p[0] + ox, p[1] + oyy, w * 0.35, hgt * 0.35, 0, 0, 6.28); ctx.fill(); } }
+    ctx.fillRect(Math.round(p[0] + ox - w * 0.25), Math.round(p[1] - ry * 4 + oyy), Math.round(w * 0.5), Math.round(hgt * 0.6)); }
   // lit neon & screens
   if (!other) { const sp = L.props.find(o => o.t === 'sign'); signLetters(ctx, sp.x, sp.y, true, t);
     for (const nt of L.neonText) { const w = WALLMAP[nt.edge]; const F = faceY(w.x, w.x + 1, w.y + 0.05); const on = flick(nt.seed, t, 0.5); const F2 = (u, z) => F(u * 0.5, z); faceText(ctx, F2, nt.text, nt.u, 0.03, nt.z, 0.9, on ? COL(nt.col) : rgba(COL(nt.col), 0.2)); glow(ctx, ...P(w.x + 0.9, w.y + 0.05, nt.z - 2), 16, COL(nt.col), on ? 0.5 : 0.05); }
@@ -582,18 +579,16 @@ function render() {
   UI.draw(uctx, cssW, cssH, game);
 }
 function drawWeather(c, cx, cy) {
-  const pix = G.mode === 'pixel';
   for (const d of rain) {
     d.y += d.v * (d.far ? 0.7 : 1); d.x -= d.v * 0.15;
     if (d.y > d.land) { const wx = (d.x + cx) / (2 * HW) + (d.y + cy) / (2 * HH), wy = (d.y + cy) / (2 * HH) - (d.x + cx) / (2 * HW), rm = roomAtW(wx, wy);
       if (!d.far && splashes.length < 90 && (!rm || roomFade[rm] > 0.5) && tileAt(Math.floor(wx), Math.floor(wy)) !== ' ') splashes.push({ x: d.x, y: d.y - (rm ? WH : 0), t: 0 });
       d.y = -10 - Math.random() * 30; d.x = Math.random() * (NW + 40) - 20 + 20; d.land = 30 + Math.random() * (NH - 30); }
     const col = d.far ? 'rgba(139,156,184,0.25)' : 'rgba(183,195,214,0.4)';
-    if (pix) { c.fillStyle = col; c.fillRect(Math.round(d.x), Math.round(d.y), 1, d.l); } else { c.strokeStyle = col; c.lineWidth = d.far ? 0.3 : 0.45; c.beginPath(); c.moveTo(d.x, d.y); c.lineTo(d.x - d.l * 0.15, d.y + d.l); c.stroke(); }
+    { c.fillStyle = col; c.fillRect(Math.round(d.x), Math.round(d.y), 1, d.l); }
   }
   for (let i = splashes.length - 1; i >= 0; i--) { const s = splashes[i]; if (++s.t > 8) { splashes.splice(i, 1); continue; } c.fillStyle = 'rgba(183,195,214,0.45)'; const k = s.t < 4 ? 1 : 2;
-    if (pix) { c.fillRect(Math.round(s.x - k), Math.round(s.y - 1), 1, 1); c.fillRect(Math.round(s.x + k), Math.round(s.y - 1), 1, 1); if (s.t < 3) c.fillRect(Math.round(s.x), Math.round(s.y - 2), 1, 1); }
-    else { c.beginPath(); c.ellipse(s.x, s.y, k * 1.3, 0.5, 0, 0, 6.28); c.strokeStyle = 'rgba(183,195,214,0.35)'; c.lineWidth = 0.3; c.stroke(); } }
+    { c.fillRect(Math.round(s.x - k), Math.round(s.y - 1), 1, 1); c.fillRect(Math.round(s.x + k), Math.round(s.y - 1), 1, 1); if (s.t < 3) c.fillRect(Math.round(s.x), Math.round(s.y - 2), 1, 1); } }
 }
 function ghostPos(path, u) {
   let tot = 0; const seg = []; for (let i = 1; i < path.length; i++) { const l = Math.hypot(path[i][0] - path[i - 1][0], path[i][1] - path[i - 1][1]); seg.push(l); tot += l; }
@@ -628,7 +623,7 @@ function frame(now) {
 }
 anyKeyHook = k => { if (UI.open && UI.handleKey) { UI.handleKey(k); delete pressed[k]; } };
 function boot() {
-  const q = new URLSearchParams(location.search); if (q.get('mode') === 'pixel') setMode('pixel');
+  const q = new URLSearchParams(location.search);
   UI.subtitle = 'Case 01 — The Lily Saint  ·  Starlite Motor Court';
   UI.controls = ['W A S D / arrows  walk      SHIFT  sneak      E  inspect, talk, use', 'Q (hold)  see through his eyes      N  notebook', 'M  sound'];
   layout(); buildScene(); const p = P(PL.x, PL.y); camX = p[0] - NW / 2; camY = p[1] - NH / 2; game.fade = 0;

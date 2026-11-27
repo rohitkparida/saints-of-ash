@@ -7,7 +7,7 @@ function layout() {
   const f = fitNW(), S = G.S; view.width = NW * S; view.height = NH * S;
   cssW = f.w; cssH = f.h; const top = (innerHeight - cssH) / 2 | 0; // whole-number scale: every native pixel is k x k screen pixels
   for (const el of [view, ui]) { el.style.width = cssW + 'px'; el.style.height = cssH + 'px'; el.style.left = ((innerWidth - cssW) / 2 | 0) + 'px'; el.style.top = top + 'px'; }
-  view.style.imageRendering = G.mode === 'pixel' ? 'pixelated' : 'auto'; placeBleed(view, top, cssH);
+  view.style.imageRendering = 'pixelated'; placeBleed(view, top, cssH);
   const dpr = window.devicePixelRatio || 1; ui.width = cssW * dpr; ui.height = cssH * dpr; if (UI.resize) UI.resize(cssW, cssH, dpr);
   ctx = view.getContext('2d');
 }
@@ -40,15 +40,15 @@ let ghostT = 0, train = { t: 12, phase: 'wait', x: 0 }, shake = 0, transitioning
 
 // ================= area & caches =================
 function buildArea(id) {
-  const key = id + '|' + G.mode; if (caches[key]) return caches[key];
+  const key = id; if (caches[key]) return caches[key];
   const A = AREAS[id](); const S = G.S;
   A.layers.forEach((L, li) => {
     const lw = Math.ceil(NW_MAX + Math.max(0, A.w - NW_MAX) * L.par); const cv = makeCanvas(lw * S, NH * S), c = cv.getContext('2d'); c.scale(S, S);
     L.draw(c, { w: lw, world: A.world });
-    if (A.world === 'other') { otherRemap(cv, 3 + li, S, G.mode === 'pixel'); if (G.mode !== 'pixel') postStatic(cv, { blur: L.blur ? L.blur * S * 0.5 : 0 }); }
+    if (A.world === 'other') { otherRemap(cv, 3 + li, S, true); }
     else postStatic(cv, { blur: L.blur ? L.blur * S * 0.5 : 0 });
     L.cv = cv; L.lw = lw;
-    if (A.world !== 'other') { const o = makeCanvas(cv.width, cv.height); o.getContext('2d').drawImage(cv, 0, 0); otherRemap(o, 3 + li, S, G.mode === 'pixel'); L.cvO = o; }
+    if (A.world !== 'other') { const o = makeCanvas(cv.width, cv.height); o.getContext('2d').drawImage(cv, 0, 0); otherRemap(o, 3 + li, S, true); L.cvO = o; }
   });
   caches[key] = A; return A;
 }
@@ -130,7 +130,7 @@ function ghostPos(path, u) {
 }
 function snapshot(cx, cy) { // copy a region of the current frame around world point for the Polaroid
   const S = G.S, w = 72, h = 56, sx = clamp(Math.round(cx - cam - w / 2), 0, NW - w), sy = clamp(Math.round(cy - h + 14), 0, NH - h);
-  const cv = makeCanvas(w * 4, h * 4), c = cv.getContext('2d'); c.imageSmoothingEnabled = G.mode !== 'pixel'; c.drawImage(view, sx * S, sy * S, w * S, h * S, 0, 0, w * 4, h * 4); return cv;
+  const cv = makeCanvas(w * 4, h * 4), c = cv.getContext('2d'); c.imageSmoothingEnabled = false; c.drawImage(view, sx * S, sy * S, w * S, h * S, 0, 0, w * 4, h * 4); return cv;
 }
 
 // ================= interaction =================
@@ -224,13 +224,12 @@ function update() {
   Sound.update();
   clearPressed();
 }
-function toggleMode() { setMode(G.mode === 'pixel' ? 'painted' : 'pixel'); if (typeof clearSpriteCache === 'function') clearSpriteCache(); const id = game.areaId; layout(); area = buildArea(id); if (UI.toast) UI.toast(G.mode === 'pixel' ? 'Visual style: pixel art (384x216)' : 'Visual style: hand-painted'); }
 
 // ================= render =================
 function render() {
-  const S = G.S, A = area; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.imageSmoothingEnabled = G.mode !== 'pixel';
+  const S = G.S, A = area; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.imageSmoothingEnabled = false;
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, view.width, view.height);
-  let cx = cam + (shake > 0.05 ? (Math.random() - 0.5) * shake : 0); if (G.mode === 'pixel') cx = Math.round(cx); else cx = Math.round(cx * S) / S;
+  let cx = cam + (shake > 0.05 ? (Math.random() - 0.5) * shake : 0); cx = Math.round(cx);
   const t = G.t, warp = game.warp;
   const drawLayer = L => { const off = cx * L.par * S; ctx.drawImage(L.cv, off, 0, NW * S, NH * S, 0, 0, NW * S, NH * S); if (warp > 0.01 && L.cvO) { ctx.globalAlpha = warp; ctx.drawImage(L.cvO, off, 0, NW * S, NH * S, 0, 0, NW * S, NH * S); ctx.globalAlpha = 1; } };
   const back = A.layers.filter(L => !L.z), front = A.layers.filter(L => L.z === 'front'), fg = A.layers.filter(L => L.z === 'fg');
@@ -260,7 +259,7 @@ function render() {
   // reflections in puddles (screen space copy)
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   for (const p of A.puddles) { const sx = p.x - cx; if (sx > NW || sx + p.w < 0) continue; ctx.globalAlpha = 0.5;
-    for (let r = 0; r < 7; r++) { const ww = p.w * (1 - (r / 7) ** 2 * 0.5), x0 = sx + (p.w - ww) / 2; const srcY = A.ground - 1 - r * 2; const rip = G.mode === 'pixel' ? Math.round(Math.sin(t * 2.5 + r * 1.7 + p.x) * 0.7) : Math.sin(t * 2.5 + r * 1.7 + p.x) * 0.8;
+    for (let r = 0; r < 7; r++) { const ww = p.w * (1 - (r / 7) ** 2 * 0.5), x0 = sx + (p.w - ww) / 2; const srcY = A.ground - 1 - r * 2; const rip = Math.round(Math.sin(t * 2.5 + r * 1.7 + p.x) * 0.7);
       if (x0 + rip < 0) continue; ctx.drawImage(view, Math.max(0, (x0 + rip)) * S, srcY * S, ww * S, S, x0 * S, (A.ground + 1 + r) * S, ww * S, S); }
     ctx.globalAlpha = 1; }
   // rain / ash / fg
@@ -287,7 +286,7 @@ function render() {
 function drawSigil(c, t, e) {
   const x = 566, y = 146, a = e * (0.7 + 0.3 * Math.sin(t * 3));
   glow(c, x, y, 26, C.rd, a * 0.6);
-  c.save(); c.globalAlpha = a; c.strokeStyle = C.rd; c.lineWidth = G.mode === 'pixel' ? 1 : 0.8;
+  c.save(); c.globalAlpha = a; c.strokeStyle = C.rd; c.lineWidth = 1;
   c.beginPath(); c.ellipse(x, y - 12, 10, 3, 0, 0, 6.283); c.stroke();
   c.beginPath(); c.moveTo(x - 7, y + 12); c.lineTo(x - 7, y - 2); c.lineTo(x - 4, y - 6); c.lineTo(x - 4, y + 2); c.moveTo(x - 4, y - 6); c.lineTo(x - 1, y - 8); c.lineTo(x - 1, y + 2); c.moveTo(x - 1, y - 8); c.lineTo(x + 2, y - 7); c.lineTo(x + 2, y + 2); c.moveTo(x + 2, y - 7); c.lineTo(x + 5, y - 4); c.lineTo(x + 5, y + 4); c.lineTo(x + 8, y - 1); c.moveTo(x - 7, y + 12); c.lineTo(x + 5, y + 12); c.stroke();
   c.beginPath(); c.arc(x - 1, y + 3, 2, 0, 6.283); c.stroke();
@@ -321,7 +320,7 @@ function frame(now) {
 }
 anyKeyHook = k => { if (UI.open && UI.handleKey) { UI.handleKey(k); delete pressed[k]; } };
 function boot() {
-  const q = new URLSearchParams(location.search); if (q.get('mode') === 'pixel') setMode('pixel');
+  const q = new URLSearchParams(location.search);
   layout(); enterArea(q.get('area') || 'alley', +(q.get('x') || 60)); game.fade = 0;
   const start = () => { game.started = true; game.fade = 1; const t0 = performance.now(); const f = () => { const k = (performance.now() - t0) / 1500; game.fade = Math.max(0, 1 - k); if (k < 1) requestAnimationFrame(f); }; f();
     setTimeout(() => UI.say([

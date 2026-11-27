@@ -155,18 +155,11 @@ function selOut(cv) {
 }
 function getSprite(ch, state, frame) {
   const a = ANIM[state] || ANIM.idle; const f = ((frame % a.n) + a.n) % a.n;
-  const key = G.mode + '|' + ch + '|' + state + '|' + f; let s = _spriteCache.get(key); if (s) return s;
+  const key = ch + '|' + state + '|' + f; let s = _spriteCache.get(key); if (s) return s;
   const S = G.S, cv = makeCanvas(SPR_W * S, SPR_H * S), c = cv.getContext('2d');
   c.setTransform(S, 0, 0, S, SPR_OX * S, SPR_OY * S);
   drawPuppet(c, ch, state, f);
-  if (G.mode === 'pixel') { snapCanvas(cv, 0, 100); if (ch !== 'ghost') selOut(cv); }
-  else {
-    c.setTransform(1, 0, 0, 1, 0, 0); c.globalCompositeOperation = 'source-atop';
-    const g = c.createLinearGradient(0, 8 * S, 0, SPR_H * S); g.addColorStop(0, 'rgba(255,236,210,0.16)'); g.addColorStop(0.5, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,10,0.28)');
-    c.fillStyle = g; c.fillRect(0, 0, cv.width, cv.height);
-    // thin rim on the leading edge
-    c.globalCompositeOperation = 'source-over';
-  }
+  { snapCanvas(cv, 0, 100); if (ch !== 'ghost') selOut(cv); }
   s = { cv, ox: SPR_OX, oy: SPR_OY }; _spriteCache.set(key, s); return s;
 }
 function emberPos(state, frame) {
@@ -182,12 +175,12 @@ function drawChar(ctx, ch, x, y, face, state, frame, opt = {}) {
   if (opt.silhouette) { _tctx.fillStyle = opt.silhouette; _tctx.fillRect(0, 0, w, h); }
   else if (opt.ghost || ch === 'ghost') { _tctx.fillStyle = 'rgba(57,230,255,0.35)'; _tctx.fillRect(0, 0, w, h); }
   else {
-    let L = opt.light === undefined ? 1 : clamp(opt.light, 0, 1); if (G.mode === 'pixel') L = Math.round(L * 3) / 3;
+    let L = opt.light === undefined ? 1 : clamp(opt.light, 0, 1); L = Math.round(L * 3) / 3;
     if (L < 1) { _tctx.fillStyle = `rgba(6,8,16,${(1 - L) * 0.74})`; _tctx.fillRect(0, 0, w, h); }
     if (opt.lightCol && L > 0) { _tctx.fillStyle = rgba(opt.lightCol, L * 0.2); _tctx.fillRect(0, 0, w, h); }
   }
-  if (G.mode === 'pixel') { x = Math.round(x); y = Math.round(y); }
-  ctx.save(); ctx.imageSmoothingEnabled = G.mode !== 'pixel';
+  { x = Math.round(x); y = Math.round(y); }
+  ctx.save(); ctx.imageSmoothingEnabled = false;
   if (opt.alpha !== undefined) ctx.globalAlpha *= opt.alpha;
   if (opt.ghost || ch === 'ghost') ctx.globalCompositeOperation = 'lighter';
   if (face < 0) { ctx.translate(x, 0); ctx.scale(-1, 1); ctx.translate(-x, 0); }

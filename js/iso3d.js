@@ -33,7 +33,7 @@ function setCamera(cx, cy, yaw = 0, px = 0, py = 0, pitch = 0, persp = 0) {
 // ---------- projected-art material ----------
 // Lighting: the 2D demo darkens everything with a navy layer (alpha 0.8) and cuts soft holes around each light.
 // Here every surface is lit per pixel by the same lights: distance to the light's vertical "pole" (ground pool + lit walls),
-// a facing term so surfaces turned away stay darker, the same darkness colour, and dithered bands in pixel mode.
+// a facing term so surfaces turned away stay darker, the same darkness colour, and dithered bands.
 // World space for lighting: x, y in tiles, z in "tile" units (16 native px per tile of height).
 const MAXL = 24;
 const LU = { lp: { value: Array.from({ length: MAXL }, () => new THREE.Vector4()) }, lc: { value: Array.from({ length: MAXL }, () => new THREE.Vector4()) },
@@ -112,7 +112,7 @@ function build(sc) {
   decal = new THREE.Mesh(floorGeo, artMat({ cv: decalCv, bx: sc.floor.bx, by: sc.floor.by, bw: sc.floor.bw, bh: sc.floor.bh }, { mat: { depthWrite: false } }));
   decal.frustumCulled = false; decal.renderOrder = -9; scene.add(decal);
   // glowing things (neon, signs, screens) and floor reflections: level-sized canvases projected onto the geometry
-  const ES = G.mode === 'pixel' ? 1 : 2; emCv = makeCanvas(sc.floor.bw * ES, sc.floor.bh * ES); flCv = makeCanvas(sc.floor.bw * ES, sc.floor.bh * ES); emS = ES;
+  const ES = 1; emCv = makeCanvas(sc.floor.bw * ES, sc.floor.bh * ES); flCv = makeCanvas(sc.floor.bw * ES, sc.floor.bh * ES); emS = ES;
   LU.emis.value = tex(emCv); LU.floorEm.value = tex(flCv); if (ES > 1) for (const t of [LU.emis.value, LU.floorEm.value]) t.magFilter = t.minFilter = THREE.LinearFilter;
   LU.erect.value.set(sc.floor.bx, sc.floor.by, sc.floor.bw, sc.floor.bh);
   for (const it of sc.items) {
@@ -155,20 +155,20 @@ window.ORB = ORB;
 const CAMMODES = ['fixed', 'lean', 'drift', 'parallax', 'crane', 'orbit']; ORB.pitch = 0; ORB.persp = 0; ORB.vy = 0; ORB.mode = 2; ORB.vx = 0; ORB.px = null; ORB.sw = 0;
 addEventListener('keydown', e => { if (e.code === 'KeyO') { ORB.mode = (ORB.mode + 1) % 6; ORB.on = ORB.mode === 5; if (typeof UI !== 'undefined' && UI.toast) UI.toast('Camera: ' + CAMMODES[ORB.mode]); } });
 function fx2d(c, halos, walls, floor = c) { // the 2D demo's additive light effects; c/floor = where wall and floor parts go
-  const t = G.t, other = game.world === 'other', pix = G.mode === 'pixel';
+  const t = G.t, other = game.world === 'other';
   c.save(); c.globalCompositeOperation = 'lighter'; if (floor !== c) { floor.save(); floor.globalCompositeOperation = 'lighter'; }
   if (halos) {
   
   for (const l of LIGHTS) { const g = P(l.x, l.y, l.h); const big = l.kind === 'siren' ? 10 : l.kind === 'neon' ? 22 : l.kind === 'lamp' ? 10 : 7;
-    glow(c, g[0], g[1], big, l.c, l.s * 0.9); if (l.kind !== 'window' && l.kind !== 'tvwin') { const gg = P(l.x, l.y); c.fillStyle = rgba(l.c, l.s * 0.07); if (pix) pxEllipse(c, gg[0], gg[1], l.r * 0.6, l.r * 0.3); else { c.beginPath(); c.ellipse(gg[0], gg[1], l.r * 0.6, l.r * 0.3, 0, 0, 6.28); c.fill(); } }
+    glow(c, g[0], g[1], big, l.c, l.s * 0.9); if (l.kind !== 'window' && l.kind !== 'tvwin') { const gg = P(l.x, l.y); c.fillStyle = rgba(l.c, l.s * 0.07); pxEllipse(c, gg[0], gg[1], l.r * 0.6, l.r * 0.3); }
     if (l.kind === 'siren') { const a = P(l.x + 0.25, l.y - 0.02 + (l.phase ? 0.1 : -0.1), 19); rect(c, a[0] - 2, a[1], 4, 2, l.c); } }
   } else for (const l of LIGHTS) { const gg = P(l.x, l.y);
-    if (l.kind !== 'window' && l.kind !== 'tvwin') { floor.fillStyle = rgba(l.c, l.s * 0.07); if (pix) pxEllipse(floor, gg[0], gg[1], l.r * 0.6, l.r * 0.3); else { floor.beginPath(); floor.ellipse(gg[0], gg[1], l.r * 0.6, l.r * 0.3, 0, 0, 6.28); floor.fill(); } }
+    if (l.kind !== 'window' && l.kind !== 'tvwin') { floor.fillStyle = rgba(l.c, l.s * 0.07); pxEllipse(floor, gg[0], gg[1], l.r * 0.6, l.r * 0.3); }
     if (l.kind === 'siren') { const a = P(l.x + 0.25, l.y - 0.02 + (l.phase ? 0.1 : -0.1), 19); rect(c, a[0] - 2, a[1], 4, 2, l.c); } }
   if (!other) for (const [x, y, rx, ry] of L.puddles) for (const l of LIGHTS) { const d = Math.hypot(x - l.x, y - l.y); if (d > 7 || l.room) continue; const k = (1 - d / 7) * l.s; const p = P(x, y);
     const tall = l.kind === 'neon' || l.kind === 'lamp' || l.kind === 'siren'; floor.fillStyle = rgba(l.c, k * 0.5);
     const w = rx * 12, hgt = tall ? ry * 10 + 4 : ry * 6; const ox = (isoX(l.x, l.y) - p[0]) * 0.12, oyy = Math.sin(t * 3 + x) * 0.5;
-    if (pix) floor.fillRect(Math.round(p[0] + ox - w * 0.25), Math.round(p[1] - ry * 4 + oyy), Math.round(w * 0.5), Math.round(hgt * 0.6)); else { floor.beginPath(); floor.ellipse(p[0] + ox, p[1] + oyy, w * 0.35, hgt * 0.35, 0, 0, 6.28); floor.fill(); } }
+    floor.fillRect(Math.round(p[0] + ox - w * 0.25), Math.round(p[1] - ry * 4 + oyy), Math.round(w * 0.5), Math.round(hgt * 0.6)); }
   if (walls) {
   if (!other) { const sp = L.props.find(o => o.t === 'sign'); signLetters(c, sp.x, sp.y, true, t);
     for (const nt of L.neonText) { const w = WALLMAP[nt.edge]; const F = faceY(w.x, w.x + 1, w.y + 0.05); const on = flick(nt.seed, t, 0.5); const F2 = (u, z) => F(u * 0.5, z); faceText(c, F2, nt.text, nt.u, 0.03, nt.z, 0.9, on ? COL(nt.col) : rgba(COL(nt.col), 0.2)); if (halos) glow(c, ...P(w.x + 0.9, w.y + 0.05, nt.z - 2), 16, COL(nt.col), on ? 0.5 : 0.05); }
@@ -178,9 +178,9 @@ function fx2d(c, halos, walls, floor = c) { // the 2D demo's additive light effe
   }
   c.restore(); if (floor !== c) floor.restore(); }
 function render3d() {
-  const S = G.S, sc = buildScene(), t = G.t, other = game.world === 'other', pix = G.mode === 'pixel';
+  const S = G.S, sc = buildScene(), t = G.t, other = game.world === 'other';
   if (sc !== built) build(sc);
-  let cx = camX, cy = camY; if (pix) { cx = Math.round(cx); cy = Math.round(cy); } else { cx = Math.round(cx * S) / S; cy = Math.round(cy * S) / S; }
+  let cx = camX, cy = camY; { cx = Math.round(cx); cy = Math.round(cy); }
   const W = (c) => c.setTransform(S, 0, 0, S, -cx * S, -cy * S);
   if (glCanvas.width !== NW * S) renderer.setSize(NW * S, NH * S, false);
   const dt = Math.min(0.1, Math.max(0, G.t - ORB.t)); ORB.t = G.t;
@@ -208,10 +208,10 @@ function render3d() {
     if (r.it.kind === 'wall' && r.it.cutRoom) { const f = roomFade[r.it.cutRoom]; if (r.s) setU(r.s, f < 0.98 ? 1 : 0); a = f; }
     else if (r.s) setU(r.s, 0); setU(r.m, a); }
   // floor decals
-  const dc0 = decalCv.getContext('2d'); dc0.setTransform(1, 0, 0, 1, 0, 0); dc0.clearRect(0, 0, decalCv.width, decalCv.height); dc0.imageSmoothingEnabled = !pix;
+  const dc0 = decalCv.getContext('2d'); dc0.setTransform(1, 0, 0, 1, 0, 0); dc0.clearRect(0, 0, decalCv.width, decalCv.height); dc0.imageSmoothingEnabled = false;
   dc0.setTransform(S, 0, 0, S, -sc.floor.bx * S, -sc.floor.by * S);
-  if (!other) for (const [x, y, rx, ry] of L.puddles) { const k = (t * 0.9 + hash1(x * 7)) % 1; const p = P(x + Math.sin(k * 20) * rx * 0.4, y); dc0.fillStyle = rgba(C.b7, 0.5 * (1 - k)); if (pix) { dc0.fillRect(Math.round(p[0] - 1 - k * 4), Math.round(p[1]), 1, 1); dc0.fillRect(Math.round(p[0] + 1 + k * 4), Math.round(p[1]), 1, 1); } else { dc0.beginPath(); dc0.ellipse(p[0], p[1], 1 + k * 4, 0.5 + k * 2, 0, 0, 6.28); dc0.strokeStyle = dc0.fillStyle; dc0.lineWidth = 0.4; dc0.stroke(); } }
-  const shadow = (x, y) => { const p = P(x, y); dc0.fillStyle = 'rgba(3,4,7,0.45)'; if (pix) pxEllipse(dc0, p[0], p[1], 6, 2); else { dc0.beginPath(); dc0.ellipse(p[0], p[1], 6, 2.4, 0, 0, 6.28); dc0.fill(); } };
+  if (!other) for (const [x, y, rx, ry] of L.puddles) { const k = (t * 0.9 + hash1(x * 7)) % 1; const p = P(x + Math.sin(k * 20) * rx * 0.4, y); dc0.fillStyle = rgba(C.b7, 0.5 * (1 - k)); { dc0.fillRect(Math.round(p[0] - 1 - k * 4), Math.round(p[1]), 1, 1); dc0.fillRect(Math.round(p[0] + 1 + k * 4), Math.round(p[1]), 1, 1); } }
+  const shadow = (x, y) => { const p = P(x, y); dc0.fillStyle = 'rgba(3,4,7,0.45)'; pxEllipse(dc0, p[0], p[1], 6, 2); };
   decal.material.uniforms.map.value.needsUpdate = true;
   // characters
   for (const r of chars.values()) { r.used = false; r.m.visible = false; }
@@ -222,7 +222,7 @@ function render3d() {
   if (game.eye > 0.05 && !other) { const g = ghostPos(L.ghost, ghostT); list.push({ id: 'ghost', ch: 'ghost', x: g.x, y: g.y, face: g.face, state: 'walk', frame: Math.floor(t * 10) % 8, opt: { ghost: true, alpha: game.eye * (0.55 + 0.25 * Math.sin(t * 7)) } }); }
   for (const v of list) {
     if (v.id !== 'ghost') shadow(v.x, v.y);
-    const rec = charMesh(v.id), c = rec.cv.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, rec.cv.width, rec.cv.height); c.imageSmoothingEnabled = !pix; c.setTransform(S, 0, 0, S, 0, 0);
+    const rec = charMesh(v.id), c = rec.cv.getContext('2d'); c.setTransform(1, 0, 0, 1, 0, 0); c.clearRect(0, 0, rec.cv.width, rec.cv.height); c.imageSmoothingEnabled = false; c.setTransform(S, 0, 0, S, 0, 0);
     drawChar(c, v.ch, CW / 2, 50, v.face, v.state, v.frame, { light: 1, lightCol: lightCol(v.x, v.y), ...v.opt });
     if (v.id === 'player') { const em = PL.state === 'idle' ? emberPos('idle', PL.frame) : null; if (em) rect(c, CW / 2 + em.x * PL.face, 50 + em.y, 1, 1, C.s4); }
     placeChar(rec, v.x, v.y, v.id === 'player' ? (v.x + v.y) * 10 + 0.1 : 2e5 + (v.x + v.y)); // other characters after the silhouette pass: 2D never shows him through people
@@ -231,17 +231,17 @@ function render3d() {
       drawChar(sctx, 'detective', CW / 2, 50, PL.face, PL.state, PL.frame, { silhouette: '#39e6ff' }); placeChar(s, v.x, v.y, 1e5, 0.35); }
   }
   // lights -> shader uniforms (same lights, radii and strengths as the 2D darkness holes)
-  const LIT = window.LIT3D !== false; LU.lit3d.value = LIT ? 1 : 0; LU.pix.value = pix ? 1 : 0;
+  const LIT = window.LIT3D !== false; LU.lit3d.value = LIT ? 1 : 0; LU.pix.value = 1;
   if (other) LU.dark.value.set(22 / 255, 8 / 255, 5 / 255, 0.6); else LU.dark.value.set(3 / 255, 5 / 255, 12 / 255, 0.8);
   { const c = Math.cos(-ORB.yaw), s2 = Math.sin(-ORB.yaw); LU.vdir.value.set(c - s2, s2 + c, 1).normalize(); }
   const n = Math.min(MAXL, LIGHTS.length); LU.ln.value = n; const tc = new THREE.Color();
   for (let i = 0; i < n; i++) { const l = LIGHTS[i]; LU.lp.value[i].set(l.x, l.y, l.h / 16, l.r / 22.6); tc.set(l.c); tc.lerp(new THREE.Color(1, 1, 1), 0.5); LU.lc.value[i].set(tc.r * l.s, tc.g * l.s, tc.b * l.s, 1); }
   if (LIT) { const e = emCv.getContext('2d'), f = flCv.getContext('2d'), bx = built.floor.bx, by = built.floor.by;
-    for (const k of [e, f]) { k.setTransform(1, 0, 0, 1, 0, 0); k.clearRect(0, 0, emCv.width, emCv.height); k.imageSmoothingEnabled = !pix; k.setTransform(emS, 0, 0, emS, -bx * emS, -by * emS); }
+    for (const k of [e, f]) { k.setTransform(1, 0, 0, 1, 0, 0); k.clearRect(0, 0, emCv.width, emCv.height); k.imageSmoothingEnabled = false; k.setTransform(emS, 0, 0, emS, -bx * emS, -by * emS); }
     fx2d(e, false, true, f); LU.emis.value.needsUpdate = true; LU.floorEm.value.needsUpdate = true; }
   renderer.setClearColor(other ? '#0b0605' : '#030407', 1);
   renderer.render(scene, camera);
-  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.imageSmoothingEnabled = !pix; ctx.drawImage(glCanvas, 0, 0);
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.imageSmoothingEnabled = false; ctx.drawImage(glCanvas, 0, 0);
   if (LIT) { ctx.save(); ctx.setTransform(S, 0, 0, S, 0, 0); ctx.globalCompositeOperation = 'lighter'; const v = new THREE.Vector3(); // bulb halos where each light now sits on screen
     for (const l of LIGHTS) { v.set(l.x, l.y, l.h).project(camera); const big = l.kind === 'siren' ? 10 : l.kind === 'neon' ? 22 : l.kind === 'lamp' ? 10 : 7;
       glow(ctx, (v.x + 1) / 2 * NW, (1 - v.y) / 2 * NH, big, l.c, l.s * 0.9); }
@@ -256,8 +256,7 @@ function render3d() {
   const dc = darkCv.getContext('2d'); dc.setTransform(1, 0, 0, 1, 0, 0); dc.globalCompositeOperation = 'source-over'; dc.clearRect(0, 0, darkCv.width, darkCv.height);
   dc.fillStyle = other ? 'rgba(22,8,5,0.6)' : 'rgba(3,5,12,0.8)'; dc.fillRect(0, 0, darkCv.width, darkCv.height);
   dc.globalCompositeOperation = 'destination-out'; W(dc);
-  const hole = (x, y, rx, ry, a) => { if (pix) { [[1, 0.3], [0.66, 0.32], [0.36, 0.38]].forEach(([k, al]) => { dc.fillStyle = `rgba(0,0,0,${a * al})`; pxEllipse(dc, x, y, rx * k, ry * k); }); }
-    else { dc.save(); dc.translate(x, y); dc.scale(1, ry / rx); const g = dc.createRadialGradient(0, 0, 0, 0, 0, rx); g.addColorStop(0, `rgba(0,0,0,${a})`); g.addColorStop(0.5, `rgba(0,0,0,${a * 0.55})`); g.addColorStop(1, 'rgba(0,0,0,0)'); dc.fillStyle = g; dc.fillRect(-rx, -rx, rx * 2, rx * 2); dc.restore(); } };
+  const hole = (x, y, rx, ry, a) => { { [[1, 0.3], [0.66, 0.32], [0.36, 0.38]].forEach(([k, al]) => { dc.fillStyle = `rgba(0,0,0,${a * al})`; pxEllipse(dc, x, y, rx * k, ry * k); }); } };
   for (const l of LIGHTS) { const g = P(l.x, l.y); hole(g[0], g[1], l.r, l.r * 0.5, l.s); hole(g[0], g[1] - l.h * 0.55, l.r * 0.45, l.r * 0.45, l.s * 0.55); }
   ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(darkCv, 0, 0); W(ctx);
   } // !LIT: 2D darkness layer; with LIT the shader lights every surface instead

@@ -88,8 +88,8 @@ const UI = {
     if (game && calm) this._sanity(u, w, h, k, game.sanity);
     // toasts
     if (calm) this._toasts(u, k, dt); else this.toasts.forEach(t => t.t = Math.min(t.t, 0.5));
-    // mode badge
-    if (this.open !== 'title') { u.font = `${Math.round(10 * k + 2)}px ${TYPE}`; u.textAlign = 'right'; u.fillStyle = 'rgba(183,195,214,0.32)'; u.fillText(`V · ${G.mode === 'pixel' ? 'PIXEL' : 'PAINTED'}   M · SOUND   N · NOTEBOOK`, w - 14 * k, h - 12 * k); u.textAlign = 'left'; }
+    // key hints
+    if (this.open !== 'title') { u.font = `${Math.round(10 * k + 2)}px ${TYPE}`; u.textAlign = 'right'; u.fillStyle = 'rgba(183,195,214,0.32)'; u.fillText('M · SOUND   N · NOTEBOOK', w - 14 * k, h - 12 * k); u.textAlign = 'left'; }
     if (this.open === 'board') this._board(u, w, h, k, game, dt);
     else if (this.open === 'notebook') this._notebook(u, w, h, k, game);
     else if (this.open === 'dialog') this._dialog(u, w, h, k, dt);
@@ -218,7 +218,7 @@ const UI = {
     const px = inset, py = inset, pw = w - inset * 2;
     u.fillStyle = '#0a0b10'; u.fillRect(px, py, pw, ph);
     if (clue.snap) {
-      u.imageSmoothingEnabled = G.mode !== 'pixel';
+      u.imageSmoothingEnabled = false;
       const s = clue.snap; const ar = pw / ph, sar = s.width / s.height; let sw = s.width, sh = s.height, sx = 0, sy = 0;
       if (sar > ar) { sw = sh * ar; sx = (s.width - sw) / 2; } else { sh = sw / ar; sy = (s.height - sh) / 2; }
       u.drawImage(s, sx, sy, sw, sh, px, py, pw, ph); u.imageSmoothingEnabled = true;

@@ -1,6 +1,6 @@
 'use strict';
 // ---------- constants & globals ----------
-let NW = 384; const NH = 216, NW_MAX = 512;                 // native resolution (pixel mode renders exactly this)
+let NW = 384; const NH = 216, NW_MAX = 512;                 // native resolution (the game renders exactly this)
 // Crisp fit: whole-number pixel scale picked from the window height, native width widened to the window shape.
 // Rows left over above/below the 216-tall band are filled by stretching the band's edge rows (no black bars).
 let PX = 1, bleedT = null, bleedB = null;
@@ -17,12 +17,11 @@ function placeBleed(view, top, h) {
   bleedB.style.top = (top + h) + 'px'; bleedB.style.height = Math.max(0, innerHeight - top - h) + 'px';
 }
 function drawBleed(view) {
-  if (!bleedT) return; const r = 8 * G.S; // average the outer 8 rows down to a soft 64-px strip so rain/stars don't streak
+  if (!bleedT) return; const r = 8; // average the outer 8 rows down to a soft 64-px strip so rain/stars don't streak
   bleedT.getContext('2d').drawImage(view, 0, 0, view.width, r, 0, 0, 64, 1);
   bleedB.getContext('2d').drawImage(view, 0, view.height - r, view.width, r, 0, 0, 64, 1);
 }
-const G = { mode: 'painted', S: 4, t: 0 };  // painted is the art style; S = render scale (pixel mode kept only for ?mode=pixel comparisons)
-function setMode(m) { G.mode = m; G.S = m === 'pixel' ? 1 : 4; }
+const G = { S: 1, t: 0 };  // pixel art only: everything renders at native resolution (S = 1)
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;
 const lerp = (a, b, t) => a + (b - a) * t;
 const smooth = t => t * t * (3 - 2 * t);
@@ -56,7 +55,7 @@ function nearestPal(r, g, b) {
   for (let i = 0; i < PAL.length; i++) { const p = PAL[i]; const dr = r - p[0], dg = g - p[1], db = b - p[2]; const d = 2 * dr * dr + 4 * dg * dg + 3 * db * db; if (d < bd) { bd = d; best = i; } }
   qcache.set(k, best); return best;
 }
-// snap a canvas to the palette (pixel mode). dither = ordered dither amplitude (0-255 scale)
+// snap a canvas to the palette. dither = ordered dither amplitude (0-255 scale)
 function snapCanvas(cv, dither = 0, alphaCut = 110) {
   const c = cv.getContext('2d'); const im = c.getImageData(0, 0, cv.width, cv.height); const d = im.data, W = cv.width;
   for (let i = 0, p = 0; i < d.length; i += 4, p++) {

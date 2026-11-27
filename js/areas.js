@@ -1,5 +1,5 @@
 'use strict';
-// Area = static parallax layers (built once per mode/world) + gameplay geometry + dynamic draw hooks.
+// Area = static parallax layers (built once per world) + gameplay geometry + dynamic draw hooks.
 const GLYPH = {
   cocktail: [[0, 0, 16, 0, 8, 9, 0, 0], [8, 9, 8, 17], [3, 17, 13, 17], [11, 3, 15, -3], [13, -2, 17, -2]],
   sax: [[2, -4, 4, 0, 4, 12, 7, 16, 11, 15, 12, 11], [4, 3, 6, 3], [4, 7, 6, 7]],
@@ -126,7 +126,7 @@ function drawTableau(c, t, x, g) {
   rect(c, x - 48, g - 92, 96, 3, C.gd2);
   // throne back with halo
   rect(c, x - 12, g - 50, 24, 39, C.rd3); rect(c, x - 12, g - 50, 24, 1, C.gd);
-  c.save(); c.strokeStyle = C.gd; c.lineWidth = PIX() ? 1 : 0.8; c.beginPath(); c.arc(x, g - 46, 13, Math.PI, 0); c.stroke(); c.restore();
+  c.save(); c.strokeStyle = C.gd; c.lineWidth = 1; c.beginPath(); c.arc(x, g - 46, 13, Math.PI, 0); c.stroke(); c.restore();
   for (let a = 0; a < 9; a++) { const an = Math.PI + a * Math.PI / 8; line(c, x + Math.cos(an) * 13, g - 46 + Math.sin(an) * 13, x + Math.cos(an) * 17, g - 46 + Math.sin(an) * 17, C.gd); }
   // antlers
   const ant = (s) => { line(c, x + s * 3, g - 44, x + s * 10, g - 58, C.a3); line(c, x + s * 7, g - 52, x + s * 13, g - 52, C.a3); line(c, x + s * 9, g - 56, x + s * 9, g - 63, C.a3); line(c, x + s * 10, g - 58, x + s * 15, g - 64, C.a3); };
