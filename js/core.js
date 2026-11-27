@@ -1,7 +1,26 @@
 'use strict';
 // ---------- constants & globals ----------
 let NW = 384; const NH = 216, NW_MAX = 512;                 // native resolution (pixel mode renders exactly this)
-function fitNW() { NW = Math.max(288, Math.min(NW_MAX, Math.round(NH * innerWidth / innerHeight))); } // native width follows the window shape
+// Crisp fit: whole-number pixel scale picked from the window height, native width widened to the window shape.
+// Rows left over above/below the 216-tall band are filled by stretching the band's edge rows (no black bars).
+let PX = 1, bleedT = null, bleedB = null;
+function fitNW() {
+  PX = Math.max(1, Math.floor(innerHeight / NH));
+  NW = Math.max(288, Math.min(NW_MAX, Math.ceil(innerWidth / PX)));
+  return { k: PX, w: NW * PX, h: NH * PX };
+}
+function placeBleed(view, top, h) {
+  if (!bleedT) { bleedT = document.createElement('canvas'); bleedB = document.createElement('canvas');
+    for (const b of [bleedT, bleedB]) { b.style.cssText = 'position:absolute;left:0;width:100%;pointer-events:none'; document.body.insertBefore(b, view); } }
+  for (const b of [bleedT, bleedB]) { b.width = 64; b.height = 1; b.style.filter = 'blur(6px) brightness(0.8)'; }
+  bleedT.style.top = '0px'; bleedT.style.height = Math.max(0, top) + 'px';
+  bleedB.style.top = (top + h) + 'px'; bleedB.style.height = Math.max(0, innerHeight - top - h) + 'px';
+}
+function drawBleed(view) {
+  if (!bleedT) return; const r = 8 * G.S; // average the outer 8 rows down to a soft 64-px strip so rain/stars don't streak
+  bleedT.getContext('2d').drawImage(view, 0, 0, view.width, r, 0, 0, 64, 1);
+  bleedB.getContext('2d').drawImage(view, 0, view.height - r, view.width, r, 0, 0, 64, 1);
+}
 const G = { mode: 'pixel', S: 1, t: 0 };  // S = render scale (1 pixel mode, 4 painted mode)
 function setMode(m) { G.mode = m; G.S = m === 'pixel' ? 1 : 4; }
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;

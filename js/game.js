@@ -4,11 +4,10 @@ const view = document.getElementById('view'), ui = document.getElementById('ui')
 let ctx = view.getContext('2d'); const uctx = ui.getContext('2d');
 let cssW = 0, cssH = 0;
 function layout() {
-  fitNW(); const S = G.S; view.width = NW * S; view.height = NH * S;
-  const k = Math.max(innerWidth / NW, innerHeight / NH); // cover: fill the window edge to edge, crop overflow
-  cssW = Math.ceil(NW * k); cssH = Math.ceil(NH * k);
-  for (const el of [view, ui]) { el.style.width = cssW + 'px'; el.style.height = cssH + 'px'; el.style.left = ((innerWidth - cssW) / 2 | 0) + 'px'; el.style.top = ((innerHeight - cssH) / 2 | 0) + 'px'; }
-  view.style.imageRendering = G.mode === 'pixel' ? 'pixelated' : 'auto';
+  const f = fitNW(), S = G.S; view.width = NW * S; view.height = NH * S;
+  cssW = f.w; cssH = f.h; const top = (innerHeight - cssH) / 2 | 0; // whole-number scale: every native pixel is k x k screen pixels
+  for (const el of [view, ui]) { el.style.width = cssW + 'px'; el.style.height = cssH + 'px'; el.style.left = ((innerWidth - cssW) / 2 | 0) + 'px'; el.style.top = top + 'px'; }
+  view.style.imageRendering = G.mode === 'pixel' ? 'pixelated' : 'auto'; placeBleed(view, top, cssH);
   const dpr = window.devicePixelRatio || 1; ui.width = cssW * dpr; ui.height = cssH * dpr; if (UI.resize) UI.resize(cssW, cssH, dpr);
   ctx = view.getContext('2d');
 }
@@ -318,7 +317,7 @@ let last = performance.now(), acc = 0;
 function frame(now) {
   acc += Math.min(0.1, (now - last) / 1000); last = now;
   let steps = 0; while (acc >= 1 / 60 && steps < 4) { update(); acc -= 1 / 60; steps++; }
-  try { render(); } catch (e) { console.error(e); }
+  try { render(); drawBleed(view); } catch (e) { console.error(e); }
   requestAnimationFrame(frame);
 }
 anyKeyHook = k => { if (UI.open && UI.handleKey) { UI.handleKey(k); delete pressed[k]; } };
