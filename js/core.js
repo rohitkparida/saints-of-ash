@@ -1,6 +1,7 @@
 'use strict';
 // ---------- constants & globals ----------
-const NW = 384, NH = 216;                 // native resolution (pixel mode renders exactly this)
+let NW = 384; const NH = 216, NW_MAX = 512;                 // native resolution (pixel mode renders exactly this)
+function fitNW() { NW = Math.max(288, Math.min(NW_MAX, Math.round(NH * innerWidth / innerHeight))); } // native width follows the window shape
 const G = { mode: 'pixel', S: 1, t: 0 };  // S = render scale (1 pixel mode, 4 painted mode)
 function setMode(m) { G.mode = m; G.S = m === 'pixel' ? 1 : 4; }
 const clamp = (v, a, b) => v < a ? a : v > b ? b : v;

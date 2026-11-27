@@ -4,7 +4,7 @@ const view = document.getElementById('view'), ui = document.getElementById('ui')
 let ctx = view.getContext('2d'); const uctx = ui.getContext('2d');
 let cssW = 0, cssH = 0;
 function layout() {
-  const S = G.S; view.width = NW * S; view.height = NH * S;
+  fitNW(); const S = G.S; view.width = NW * S; view.height = NH * S;
   const k = Math.max(innerWidth / NW, innerHeight / NH); // cover: fill the window edge to edge, crop overflow
   cssW = Math.ceil(NW * k); cssH = Math.ceil(NH * k);
   for (const el of [view, ui]) { el.style.width = cssW + 'px'; el.style.height = cssH + 'px'; el.style.left = ((innerWidth - cssW) / 2 | 0) + 'px'; el.style.top = ((innerHeight - cssH) / 2 | 0) + 'px'; }
@@ -44,7 +44,7 @@ function buildArea(id) {
   const key = id + '|' + G.mode; if (caches[key]) return caches[key];
   const A = AREAS[id](); const S = G.S;
   A.layers.forEach((L, li) => {
-    const lw = Math.ceil(NW + (A.w - NW) * L.par); const cv = makeCanvas(lw * S, NH * S), c = cv.getContext('2d'); c.scale(S, S);
+    const lw = Math.ceil(NW_MAX + Math.max(0, A.w - NW_MAX) * L.par); const cv = makeCanvas(lw * S, NH * S), c = cv.getContext('2d'); c.scale(S, S);
     L.draw(c, { w: lw, world: A.world });
     if (A.world === 'other') { otherRemap(cv, 3 + li, S, G.mode === 'pixel'); if (G.mode !== 'pixel') postStatic(cv, { blur: L.blur ? L.blur * S * 0.5 : 0 }); }
     else postStatic(cv, { blur: L.blur ? L.blur * S * 0.5 : 0 });

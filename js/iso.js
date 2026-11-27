@@ -15,7 +15,7 @@ const view = document.getElementById('view'), ui = document.getElementById('ui')
 let ctx = view.getContext('2d'); const uctx = ui.getContext('2d');
 let cssW = 0, cssH = 0, darkCv = null, occCv = null, silCv = null;
 function layout() {
-  const S = G.S; view.width = NW * S; view.height = NH * S;
+  fitNW(); const S = G.S; view.width = NW * S; view.height = NH * S;
   const k = Math.max(innerWidth / NW, innerHeight / NH); // cover: fill the window edge to edge, crop overflow
   cssW = Math.ceil(NW * k); cssH = Math.ceil(NH * k);
   for (const el of [view, ui]) { el.style.width = cssW + 'px'; el.style.height = cssH + 'px'; el.style.left = ((innerWidth - cssW) / 2 | 0) + 'px'; el.style.top = ((innerHeight - cssH) / 2 | 0) + 'px'; }

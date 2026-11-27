@@ -199,13 +199,13 @@ function neon(c, x, y, glyph0, col, on, sc = 1.6) {
 function flick(seed, t, rate = 1) { const k = Math.floor(t * 12 * rate); const h = hash2(k, seed, 1); if (h < 0.04) return false; const h2 = hash2(Math.floor(t * 0.7), seed, 2); if (h2 < 0.12) return hash2(k, seed, 3) > 0.5; return true; }
 // vignette
 const vigCache = {};
-function vignette() { const key = G.mode; if (vigCache[key]) return vigCache[key]; const S = G.S, cv = makeCanvas(NW * S, NH * S), c = cv.getContext('2d');
+function vignette() { const key = G.mode + NW; if (vigCache[key]) return vigCache[key]; const S = G.S, cv = makeCanvas(NW * S, NH * S), c = cv.getContext('2d');
   const g = c.createRadialGradient(NW * S / 2, NH * S / 2, NH * S * 0.35, NW * S / 2, NH * S / 2, NW * S * 0.62); g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(2,3,8,0.75)'); c.fillStyle = g; c.fillRect(0, 0, cv.width, cv.height);
   if (PIX()) { const im = c.getImageData(0, 0, cv.width, cv.height), d = im.data; for (let i = 0, p = 0; i < d.length; i += 4, p++) { const x = p % cv.width, y = (p / cv.width) | 0; const a = d[i + 3] / 255; d[i + 3] = a > bayer(x, y) * 0.8 + 0.1 ? Math.min(255, Math.round(a * 3) / 3 * 255 + 40) : 0; } c.putImageData(im, 0, 0); }
   return vigCache[key] = cv; }
 // ink tendrils for killer's eye (screen edge)
 const inkCache = {};
-function inkFrame() { const key = G.mode; if (inkCache[key]) return inkCache[key]; const S = G.S, cv = makeCanvas(NW * S, NH * S), c = cv.getContext('2d'); c.scale(S, S); const r = mulberry32(31);
+function inkFrame() { const key = G.mode + NW; if (inkCache[key]) return inkCache[key]; const S = G.S, cv = makeCanvas(NW * S, NH * S), c = cv.getContext('2d'); c.scale(S, S); const r = mulberry32(31);
   for (let i = 0; i < 90; i++) { const side = r() * 4 | 0; let x = side === 0 ? r() * NW : side === 1 ? NW : side === 2 ? r() * NW : 0, y = side === 0 ? 0 : side === 1 ? r() * NH : side === 2 ? NH : r() * NH; let a = Math.atan2(NH / 2 - y, NW / 2 - x) + (r() - 0.5) * 1.2, w = 3 + r() * 5;
     c.fillStyle = r() < 0.15 ? C.rd3 : C.k0; for (let k = 0; k < 40 && w > 0.3; k++) { disc(c, x, y, w, c.fillStyle); x += Math.cos(a) * w * 0.8; y += Math.sin(a) * w * 0.8; a += (r() - 0.5) * 0.5; w *= 0.93; } }
   return inkCache[key] = cv; }
